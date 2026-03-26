@@ -1,0 +1,133 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --emerald: #1DBF73;
+    --solar: #F9A825;
+    --navy: #0A2540;
+    --white: #FFFFFF;
+    --glass-bg: rgba(255, 255, 255, 0.1);
+    --glass-border: rgba(255, 255, 255, 0.2);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    color: #1a202c;
+    background: #FFFFFF;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  ::selection {
+    background: #1DBF73;
+    color: white;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-emerald text-white font-semibold px-6 py-3 rounded-full
+           hover:bg-emerald-600 active:scale-95 transition-all duration-200
+           shadow-emerald hover:shadow-lg inline-flex items-center gap-2;
+  }
+
+  .btn-secondary {
+    @apply border-2 border-navy text-navy font-semibold px-6 py-3 rounded-full
+           hover:bg-navy hover:text-white active:scale-95 transition-all duration-200
+           inline-flex items-center gap-2;
+  }
+
+  .btn-outline-emerald {
+    @apply border-2 border-emerald text-emerald font-semibold px-6 py-3 rounded-full
+           hover:bg-emerald hover:text-white active:scale-95 transition-all duration-200
+           inline-flex items-center gap-2;
+  }
+
+  .section-heading {
+    @apply font-display font-bold text-navy;
+  }
+
+  .section-tag {
+    @apply inline-flex items-center gap-2 bg-emerald/10 text-emerald font-semibold
+           text-sm px-4 py-1.5 rounded-full mb-4;
+  }
+
+  .card-base {
+    @apply bg-white rounded-2xl shadow-card hover:shadow-card-hover transition-all duration-300 overflow-hidden;
+  }
+
+  .glass-card {
+    background: rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 1.5rem;
+    box-shadow: 0 8px 32px rgba(10, 37, 64, 0.2);
+  }
+
+  .gradient-text {
+    @apply bg-gradient-to-r from-emerald to-solar bg-clip-text text-transparent;
+  }
+
+  .nav-link {
+    @apply text-navy/80 hover:text-emerald font-medium transition-colors duration-200 cursor-pointer;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 rounded-xl border border-gray-200 bg-white/80
+           focus:border-emerald focus:ring-2 focus:ring-emerald/20 focus:outline-none
+           transition-all duration-200 text-navy placeholder-gray-400;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .animate-delay-100 { animation-delay: 0.1s; }
+  .animate-delay-200 { animation-delay: 0.2s; }
+  .animate-delay-300 { animation-delay: 0.3s; }
+  .animate-delay-400 { animation-delay: 0.4s; }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #f1f5f9; }
+::-webkit-scrollbar-thumb { background: #1DBF73; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #17A362; }
+
+/* Navbar shadow on scroll (JS adds .scrolled class) */
+.navbar-scrolled {
+  box-shadow: 0 4px 20px rgba(10, 37, 64, 0.12);
+  background: rgba(255, 255, 255, 0.97) !important;
+  backdrop-filter: blur(12px);
+}
+
+/* Hero particle effect */
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(29, 191, 115, 0.15);
+  animation: float 6s ease-in-out infinite;
+}
