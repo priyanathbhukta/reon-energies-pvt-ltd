@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Phone, Mail, MapPin, Clock, Send, CheckCircle, Building2, Zap } from 'lucide-react'
+import { API } from '../api'
 
 const UTILITIES = [
     { id: 'fan', label: 'Fan' },
@@ -44,7 +45,7 @@ export default function Contact() {
         setError('')
 
         try {
-            const res = await fetch('/api/enquiries', {
+            const res = await fetch(`${API}/api/enquiries`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(form),

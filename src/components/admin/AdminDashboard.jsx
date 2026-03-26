@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { API } from '../../api'
 import {
     Users, UserCheck, UserPlus, TrendingUp, IndianRupee,
     LogOut, RefreshCw, Search, Trash2,
@@ -50,11 +51,11 @@ export default function AdminDashboard() {
         setLoading(true)
         try {
             const [statsRes, enquiriesRes, schemesRes, testimonialsRes, galleryRes] = await Promise.all([
-                fetch('/api/dashboard/stats', { headers }),
-                fetch('/api/enquiries', { headers }),
-                fetch('/api/content/schemes', { headers }),
-                fetch('/api/content/testimonials', { headers }),
-                fetch('/api/content/gallery', { headers }),
+                fetch(`${API}/api/dashboard/stats`, { headers }),
+                fetch(`${API}/api/enquiries`, { headers }),
+                fetch(`${API}/api/content/schemes`, { headers }),
+                fetch(`${API}/api/content/testimonials`, { headers }),
+                fetch(`${API}/api/content/gallery`, { headers }),
             ])
             if (statsRes.status === 401) { localStorage.removeItem('reon_admin_token'); navigate('/admin/login'); return }
             setStats(await statsRes.json())
@@ -67,13 +68,13 @@ export default function AdminDashboard() {
     }
 
     const updateStatus = async (id, status) => {
-        await fetch(`/api/enquiries/${id}/status`, { method: 'PATCH', headers, body: JSON.stringify({ status }) })
+        await fetch(`${API}/api/enquiries/${id}/status`, { method: 'PATCH', headers, body: JSON.stringify({ status }) })
         fetchAll()
     }
 
     const deleteEnquiry = async (id) => {
         if (!window.confirm('Delete this enquiry?')) return
-        await fetch(`/api/enquiries/${id}`, { method: 'DELETE', headers })
+        await fetch(`${API}/api/enquiries/${id}`, { method: 'DELETE', headers })
         fetchAll()
     }
 
@@ -85,7 +86,7 @@ export default function AdminDashboard() {
 
     // Content CRUD helpers
     const saveContent = async (type, data, isNew) => {
-        const url = isNew ? `/api/content/${type}` : `/api/content/${type}/${data.id}`
+        const url = isNew ? `${API}/api/content/${type}` : `${API}/api/content/${type}/${data.id}`
         const method = isNew ? 'POST' : 'PUT'
         await fetch(url, { method, headers, body: JSON.stringify(data) })
         setEditModal(null)
@@ -94,7 +95,7 @@ export default function AdminDashboard() {
 
     const deleteContent = async (type, id) => {
         if (!window.confirm('Delete this item?')) return
-        await fetch(`/api/content/${type}/${id}`, { method: 'DELETE', headers })
+        await fetch(`${API}/api/content/${type}/${id}`, { method: 'DELETE', headers })
         fetchAll()
     }
 

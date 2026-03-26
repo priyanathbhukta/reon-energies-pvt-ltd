@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState } from 'react'
 import { Star, Quote } from 'lucide-react'
+import { API } from '../api'
 
 const FALLBACK_TESTIMONIALS = [
     { id: 1, name: 'Suresh Menon', role: 'Homeowner, Kochi', rating: 5, review: 'REON installed a 5 kW system at our home. The process was seamless — from design to net meter approval. Our electricity bill dropped from ₹4,500 to under ₹200 monthly!', avatar_initials: 'SM', avatar_color: 'bg-emerald', date_label: 'November 2024' },
@@ -26,12 +27,12 @@ export default function Testimonials() {
     const [galleryImages, setGalleryImages] = useState(FALLBACK_GALLERY)
 
     useEffect(() => {
-        fetch('/api/content/testimonials')
+        fetch(`${API}/api/content/testimonials`)
             .then(r => r.ok ? r.json() : Promise.reject())
             .then(data => { if (data.length > 0) setTestimonials(data) })
             .catch(() => {})
 
-        fetch('/api/content/gallery')
+        fetch(`${API}/api/content/gallery`)
             .then(r => r.ok ? r.json() : Promise.reject())
             .then(data => { if (data.length > 0) setGalleryImages(data) })
             .catch(() => {})

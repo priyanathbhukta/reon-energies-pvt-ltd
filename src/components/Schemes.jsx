@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState } from 'react'
 import { CheckCircle, Gift } from 'lucide-react'
+import { API } from '../api'
 
 const FALLBACK_SCHEMES = [
     {
@@ -43,7 +44,7 @@ export default function Schemes() {
     const [schemes, setSchemes] = useState(FALLBACK_SCHEMES)
 
     useEffect(() => {
-        fetch('/api/content/schemes')
+        fetch(`${API}/api/content/schemes`)
             .then(r => r.ok ? r.json() : Promise.reject())
             .then(data => {
                 if (data.length > 0) {

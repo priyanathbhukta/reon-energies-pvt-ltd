@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Lock, User, Eye, EyeOff, Zap } from 'lucide-react'
+import { API } from '../../api'
 
 export default function AdminLogin() {
     const navigate = useNavigate()
@@ -15,7 +16,7 @@ export default function AdminLogin() {
         setError('')
 
         try {
-            const res = await fetch('/api/auth/login', {
+            const res = await fetch(`${API}/api/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(form),
