@@ -15,19 +15,31 @@ export default function AdminLogin() {
         setLoading(true)
         setError('')
 
+        // Show cold-start warning after 5 seconds
+        const wakeTimer = setTimeout(() => {
+            setError('⏳ Server is waking up (free tier cold start). Please wait 30–60 seconds...')
+        }, 5000)
+
         try {
+            const controller = new AbortController()
+            const timeout = setTimeout(() => controller.abort(), 90000) // 90s timeout
+
             const res = await fetch(`${API}/api/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(form),
+                signal: controller.signal,
             })
+            clearTimeout(timeout)
+            clearTimeout(wakeTimer)
+            setError('')
 
             const text = await res.text()
             let data
             try {
                 data = JSON.parse(text)
             } catch {
-                throw new Error('Server is not responding. Please ensure the backend is running.')
+                throw new Error('Server returned an invalid response. Check Render environment variables.')
             }
 
             if (!res.ok) {
@@ -38,7 +50,12 @@ export default function AdminLogin() {
             localStorage.setItem('reon_admin_user', JSON.stringify(data.admin))
             navigate('/admin/dashboard')
         } catch (err) {
-            setError(err.message)
+            clearTimeout(wakeTimer)
+            if (err.name === 'AbortError') {
+                setError('Connection timed out. The server may be down. Check your Render dashboard.')
+            } else {
+                setError(err.message)
+            }
         } finally {
             setLoading(false)
         }
