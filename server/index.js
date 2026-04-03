@@ -6,6 +6,7 @@ import enquiriesRouter from './routes/enquiries.js';
 import authRouter from './routes/auth.js';
 import dashboardRouter from './routes/dashboard.js';
 import contentRouter from './routes/content.js';
+import quotationRouter from './modules/quotation/routes.js';
 
 dotenv.config();
 
@@ -40,6 +41,7 @@ app.use('/api/enquiries', enquiriesRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/content', contentRouter);
+app.use('/api', quotationRouter); // Quotation Generator module
 
 // Health check
 app.get('/api/health', (req, res) => {

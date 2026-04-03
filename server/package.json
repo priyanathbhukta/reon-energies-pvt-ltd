@@ -6,14 +6,20 @@
   "type": "module",
   "scripts": {
     "start": "node index.js",
-    "migrate": "node migrate.js"
+    "migrate": "node migrate.js",
+    "migrate:quotation": "node migrate_quotation.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
+    "cloudinary": "^2.9.0",
     "cors": "^2.8.5",
+    "docxtemplater": "^3.68.3",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
-    "pg": "^8.13.1"
+    "multer": "^2.1.1",
+    "pdfkit": "^0.18.0",
+    "pg": "^8.13.1",
+    "pizzip": "^3.2.0"
   }
 }

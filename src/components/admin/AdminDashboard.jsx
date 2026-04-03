@@ -7,8 +7,11 @@ import {
     BarChart3, Zap, Phone, Mail, MapPin,
     ArrowUpRight, ArrowDownRight, Filter,
     LayoutGrid, MessageSquare, Image, FileText,
-    Plus, X, Save, Edit2, Star
+    Plus, X, Save, Edit2, Star, Calculator, ClipboardList, FileDown
 } from 'lucide-react'
+import CreateQuotation from './quotation/CreateQuotation'
+import TemplateManager from './quotation/TemplateManager'
+import QuotationHistory from './quotation/QuotationHistory'
 
 const STATUS_CONFIG = {
     new: { label: 'New', color: 'bg-blue-100 text-blue-700' },
@@ -22,6 +25,7 @@ const TABS = [
     { id: 'schemes', label: 'Schemes', icon: FileText },
     { id: 'testimonials', label: 'Testimonials', icon: MessageSquare },
     { id: 'gallery', label: 'Gallery', icon: Image },
+    { id: 'quotation', label: 'Quotation Generator', icon: Calculator },
 ]
 
 export default function AdminDashboard() {
@@ -197,11 +201,13 @@ export default function AdminDashboard() {
                         >
                             <tab.icon className="w-4 h-4" />
                             {tab.label}
-                            <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                                activeTab === tab.id ? 'bg-white/20' : 'bg-gray-100'
-                            }`}>
-                                {tab.id === 'enquiries' ? enquiries.length : tab.id === 'schemes' ? schemes.length : tab.id === 'testimonials' ? testimonials.length : gallery.length}
-                            </span>
+                            {tab.id !== 'quotation' && (
+                                <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                                    activeTab === tab.id ? 'bg-white/20' : 'bg-gray-100'
+                                }`}>
+                                    {tab.id === 'enquiries' ? enquiries.length : tab.id === 'schemes' ? schemes.length : tab.id === 'testimonials' ? testimonials.length : gallery.length}
+                                </span>
+                            )}
                         </button>
                     ))}
                 </div>
@@ -211,6 +217,7 @@ export default function AdminDashboard() {
                 {activeTab === 'schemes' && <SchemesTab schemes={schemes} onEdit={(s) => setEditModal({ type: 'schemes', data: s, isNew: false })} onAdd={() => setEditModal({ type: 'schemes', data: { icon: '☀️', badge: '', name: '', tagline: '', eligibility: [''], subsidy_breakdown: [{ label: '', value: '' }], reon_help: [''], total_subsidy: '', accent: 'from-emerald-700 to-emerald-600', featured: false, sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('schemes', id)} />}
                 {activeTab === 'testimonials' && <TestimonialsTab testimonials={testimonials} onEdit={(t) => setEditModal({ type: 'testimonials', data: t, isNew: false })} onAdd={() => setEditModal({ type: 'testimonials', data: { name: '', role: '', rating: 5, review: '', avatar_initials: '', avatar_color: 'bg-emerald', date_label: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('testimonials', id)} />}
                 {activeTab === 'gallery' && <GalleryTab gallery={gallery} onEdit={(g) => setEditModal({ type: 'gallery', data: g, isNew: false })} onAdd={() => setEditModal({ type: 'gallery', data: { image_url: '', alt_text: '', label: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('gallery', id)} />}
+                {activeTab === 'quotation' && <QuotationTab />}
             </main>
 
             {/* Edit Modal */}
@@ -221,6 +228,44 @@ export default function AdminDashboard() {
                     onSave={(data) => saveContent(editModal.type, data, editModal.isNew)}
                 />
             )}
+        </div>
+    )
+}
+
+// ========== QUOTATION TAB (Sub-navigation wrapper) ==========
+function QuotationTab() {
+    const [subTab, setSubTab] = useState('create')
+
+    const SUB_TABS = [
+        { id: 'create', label: 'Create Quotation', icon: Calculator },
+        { id: 'templates', label: 'Template Manager', icon: FileDown },
+        { id: 'history', label: 'Quotation History', icon: ClipboardList },
+    ]
+
+    return (
+        <div className="space-y-5">
+            {/* Sub-tab nav */}
+            <div className="flex items-center gap-1 bg-white rounded-2xl p-1.5 border border-gray-100 shadow-sm overflow-x-auto">
+                {SUB_TABS.map(tab => (
+                    <button
+                        key={tab.id}
+                        onClick={() => setSubTab(tab.id)}
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
+                            subTab === tab.id
+                                ? 'bg-navy text-white shadow-sm'
+                                : 'text-gray-500 hover:text-navy hover:bg-gray-50'
+                        }`}
+                    >
+                        <tab.icon className="w-4 h-4" />
+                        {tab.label}
+                    </button>
+                ))}
+            </div>
+
+            {/* Sub-tab content */}
+            {subTab === 'create' && <CreateQuotation />}
+            {subTab === 'templates' && <TemplateManager />}
+            {subTab === 'history' && <QuotationHistory />}
         </div>
     )
 }
