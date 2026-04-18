@@ -93,6 +93,20 @@ async function migrate() {
     `);
     console.log('✅ gallery_images table ready');
 
+    // Create directors table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS directors (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        role VARCHAR(255),
+        description TEXT,
+        image_url TEXT,
+        sort_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('✅ directors table ready');
+
     // Seed default admin
     const existingAdmin = await client.query('SELECT id FROM admins WHERE username = $1', ['admin']);
     if (existingAdmin.rows.length === 0) {
@@ -172,12 +186,12 @@ async function migrate() {
     const galleryCount = await client.query('SELECT COUNT(*) as count FROM gallery_images');
     if (parseInt(galleryCount.rows[0].count) === 0) {
       const galleryData = [
-        { image_url: 'https://images.unsplash.com/photo-1509391366360-2e959784a276?w=600&q=80', alt_text: 'Rooftop solar installation — residential home', label: 'Residential Installation', sort_order: 1 },
-        { image_url: 'https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?w=600&q=80', alt_text: 'Solar panel array on commercial building', label: 'Commercial Rooftop', sort_order: 2 },
-        { image_url: 'https://images.unsplash.com/photo-1473341304170-971dccb5ac1e?w=600&q=80', alt_text: 'Solar water pump installation at farm', label: 'Solar Water Pump', sort_order: 3 },
-        { image_url: 'https://images.unsplash.com/photo-1497440001374-f26997328c1b?w=600&q=80', alt_text: 'Large-scale industrial solar plant', label: 'Industrial Solar Plant', sort_order: 4 },
-        { image_url: 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=600&q=80', alt_text: 'Solar battery storage system installation', label: 'Battery Storage System', sort_order: 5 },
-        { image_url: 'https://images.unsplash.com/photo-1605980776566-e6ec37f4b5e4?w=600&q=80', alt_text: 'Ground mounted solar panel installation', label: 'Ground-Mount Array', sort_order: 6 },
+        { image_url: '/gallery/res_solar.png', alt_text: 'Rooftop solar installation — residential home', label: 'Residential Installation', sort_order: 1 },
+        { image_url: '/gallery/com_solar.png', alt_text: 'Solar panel array on commercial building', label: 'Commercial Rooftop', sort_order: 2 },
+        { image_url: '/gallery/water_pump.png', alt_text: 'Solar water pump installation at farm', label: 'Solar Water Pump', sort_order: 3 },
+        { image_url: '/gallery/ind_solar.png', alt_text: 'Large-scale industrial solar plant', label: 'Industrial Solar Plant', sort_order: 4 },
+        { image_url: '/gallery/bat_storage.png', alt_text: 'Solar battery storage system installation', label: 'Battery Storage System', sort_order: 5 },
+        { image_url: '/gallery/grd_solar.png', alt_text: 'Ground mounted solar panel installation', label: 'Ground-Mount Array', sort_order: 6 },
       ];
       for (const g of galleryData) {
         await client.query(
@@ -186,6 +200,23 @@ async function migrate() {
         );
       }
       console.log('✅ Seeded 6 gallery images');
+    }
+
+    // Seed directors if empty
+    const dirCount = await client.query('SELECT COUNT(*) as count FROM directors');
+    if (parseInt(dirCount.rows[0].count) === 0) {
+      const dirData = [
+        { name: 'Masuma Sarkar', role: 'Board of Director', description: 'Driving the vision for a sustainable future across India.', image_url: 'https://ui-avatars.com/api/?name=Masuma+Sarkar&background=1B2D5B&color=fff&size=200', sort_order: 1 },
+        { name: 'Jayanta Bhukta', role: 'Board of Director', description: 'Experienced executive promoting clean energy solutions globally.', image_url: 'https://ui-avatars.com/api/?name=Jayanta+Bhukta&background=1A8FA0&color=fff&size=200', sort_order: 2 },
+        { name: 'Sk Jishan Ali', role: 'Board of Director', description: 'Committed to innovation and leading impactful renewable projects.', image_url: 'https://ui-avatars.com/api/?name=Sk+Jishan+Ali&background=E8611A&color=fff&size=200', sort_order: 3 }
+      ];
+      for (const d of dirData) {
+        await client.query(
+          'INSERT INTO directors (name, role, description, image_url, sort_order) VALUES ($1, $2, $3, $4, $5)',
+          [d.name, d.role, d.description, d.image_url, d.sort_order]
+        );
+      }
+      console.log('✅ Seeded 3 directors');
     }
 
     console.log('\n🎉 Migration complete!');

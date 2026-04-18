@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://www.reonenergies.in/sitemap.xml
+
+# Block admin routes from indexing
+Disallow: /admin
+Disallow: /api/

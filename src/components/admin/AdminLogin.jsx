@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Lock, User, Eye, EyeOff, Zap } from 'lucide-react'
+import { Lock, User, Eye, EyeOff } from 'lucide-react'
 import { API } from '../../api'
 
 export default function AdminLogin() {
@@ -72,8 +72,8 @@ export default function AdminLogin() {
             <div className="relative w-full max-w-md">
                 {/* Logo area */}
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald/15 rounded-2xl mb-4">
-                        <Zap className="w-8 h-8 text-emerald" />
+                    <div className="inline-flex items-center justify-center w-20 h-20 bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl shadow-lg mb-4 p-2">
+                        <img src="/admin-logo.jpg" alt="REON Admin Logo" className="w-full h-full object-contain rounded-xl" />
                     </div>
                     <h1 className="text-3xl font-display font-bold text-white mb-1">REON Admin</h1>
                     <p className="text-white/50 text-sm">Sign in to access the admin dashboard</p>

@@ -40,12 +40,11 @@ export default function Navbar() {
 
     return (
         <header
-            className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'bg-white/97 shadow-lg backdrop-blur-md' : 'bg-white'
-                }`}
+            className={`fixed top-0 left-0 right-0 z-50 bg-white transition-all duration-300 ${scrolled ? 'shadow-lg' : ''}`}
             role="banner"
         >
             <nav
-                className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between py-3"
+                className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between py-0"
                 aria-label="Main navigation"
             >
                 {/* Official Logo */}
@@ -56,9 +55,10 @@ export default function Navbar() {
                     onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
                 >
                     <img
-                        src="/logo.png"
-                        alt="REON Energies Pvt Ltd official logo"
-                        className="h-20 w-auto object-contain group-hover:scale-105 transition-transform duration-200"
+                        src="/logo_final_cropped.png"
+                        alt="REON Energies Pvt Ltd - Solar Energy Company West Bengal"
+                        className="h-16 w-auto object-contain block group-hover:scale-105 transition-transform duration-200"
+                        loading="eager"
                     />
                 </a>
 

@@ -122,7 +122,7 @@ export default function Hero() {
                             <div className="absolute inset-0 bg-emerald/20 rounded-3xl blur-2xl scale-110" />
                             <div className="relative rounded-3xl overflow-hidden shadow-2xl border border-white/10">
                                 <img
-                                    src="https://images.unsplash.com/photo-1509391366360-2e959784a276?w=800&q=80"
+                                    src="/assets/hero_rooftop_solar.png"
                                     alt="Solar panels installation on rooftop — REON Energy"
                                     className="w-full h-[400px] lg:h-[500px] object-cover"
                                     loading="eager"

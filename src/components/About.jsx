@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState } from 'react'
 import { Eye, Target, Building2, Users } from 'lucide-react'
+import { API } from '../api'
 
 const tiles = [
     {
@@ -50,12 +51,7 @@ const tiles = [
         icon: <Users className="w-7 h-7 text-emerald" />,
         label: 'Board of Directors',
         title: null,
-        directors: [
-            { name: 'Sk Hossain Ali', role: 'Executive Director', initials: 'HA' },
-            { name: 'Jayanta Bhukta', role: 'Executive Director', initials: 'JB' },
-            { name: 'Sk Zeeshan Ali', role: 'Executive Director', initials: 'ZA' },
-            { name: 'Subham Bhukta', role: 'Executive Director', initials: 'SB' },
-        ],
+        dynamicDirectors: true,
     },
     {
         id: 'history',
@@ -77,6 +73,28 @@ const tiles = [
 export default function About() {
     const ref = useRef(null)
     const [visible, setVisible] = useState(false)
+    const [directorsList, setDirectorsList] = useState([])
+    const [hoveredDirector, setHoveredDirector] = useState(null)
+
+    useEffect(() => {
+        fetch(`${API}/api/content/directors`)
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return res.json();
+            })
+            .then(data => {
+                if (Array.isArray(data)) {
+                    setDirectorsList(data);
+                } else {
+                    console.error("Directors data is not an array:", data);
+                    setDirectorsList([]);
+                }
+            })
+            .catch(err => {
+                console.error("Error fetching directors:", err);
+                setDirectorsList([]);
+            })
+    }, [])
 
     useEffect(() => {
         const observer = new IntersectionObserver(
@@ -148,17 +166,42 @@ export default function About() {
                             )}
 
                             {/* Directors */}
-                            {tile.directors && (
-                                <div className="space-y-3 mt-2">
-                                    {tile.directors.map((d) => (
-                                        <div key={d.name} className="flex items-center gap-3">
-                                            <div className="w-10 h-10 bg-emerald/15 rounded-full flex items-center justify-center font-bold text-emerald text-sm flex-shrink-0">
-                                                {d.initials}
+                            {tile.dynamicDirectors && (
+                                <div className="space-y-4 mt-2 relative">
+                                    {directorsList.map((d) => (
+                                        <div 
+                                            key={d.id} 
+                                            className="flex items-center gap-3 group relative cursor-pointer"
+                                            onMouseEnter={() => setHoveredDirector(d.id)}
+                                            onMouseLeave={() => setHoveredDirector(null)}
+                                        >
+                                            <div className="w-10 h-10 bg-emerald/15 rounded-full overflow-hidden border border-emerald/20 flex items-center justify-center font-bold text-emerald text-sm flex-shrink-0">
+                                                {d.image_url ? (
+                                                    <img src={d.image_url} alt={d.name} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    d.name?.[0] || 'D'
+                                                )}
                                             </div>
                                             <div>
-                                                <p className="font-semibold text-navy text-sm">{d.name}</p>
+                                                <p className="font-semibold text-navy text-sm group-hover:text-emerald transition-colors">{d.name}</p>
                                                 <p className="text-gray-500 text-xs">{d.role}</p>
                                             </div>
+
+                                            {/* Hover Pop Card */}
+                                            {hoveredDirector === d.id && (
+                                                <div className="absolute left-0 bottom-full mb-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-100 z-50 animate-fade-in p-4 origin-bottom overflow-hidden">
+                                                    {d.image_url && (
+                                                        <div className="h-32 -mx-4 -mt-4 mb-3 bg-gray-100 relative">
+                                                            <img src={d.image_url} alt={d.name} className="w-full h-full object-cover" />
+                                                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                                                            <p className="absolute bottom-2 left-3 text-white font-bold text-lg leading-tight">{d.name}</p>
+                                                        </div>
+                                                    )}
+                                                    {!d.image_url && <p className="font-bold text-navy text-lg mb-1">{d.name}</p>}
+                                                    <p className="text-emerald text-xs font-semibold mb-2 uppercase tracking-wide">{d.role}</p>
+                                                    <p className="text-gray-600 text-xs leading-relaxed">{d.description || 'Dedicated to bringing sustainable energy to India.'}</p>
+                                                </div>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
@@ -167,15 +210,15 @@ export default function About() {
                             {/* Timeline */}
                             {tile.timeline && (
                                 <div className="space-y-2.5 mt-2">
-                                    {tile.timeline.map((t, i) => (
-                                        <div key={t.year} className="flex items-start gap-3">
+                                    {tile.timeline.map((item, index) => (
+                                        <div key={`timeline-${item.year}-${index}`} className="flex items-start gap-3">
                                             <div className="flex flex-col items-center">
                                                 <div className="w-2.5 h-2.5 bg-emerald rounded-full flex-shrink-0 mt-0.5" />
-                                                {i < tile.timeline.length - 1 && <div className="w-0.5 h-4 bg-emerald/20 mt-0.5" />}
+                                                {index < tile.timeline.length - 1 && <div className="w-0.5 h-4 bg-emerald/20 mt-0.5" />}
                                             </div>
                                             <div>
-                                                <span className="text-emerald font-bold text-xs">{t.year}</span>
-                                                <span className="text-gray-600 text-xs block leading-tight">{t.event}</span>
+                                                <span className="text-emerald font-bold text-xs">{item.year}</span>
+                                                <span className="text-gray-600 text-xs block leading-tight">{item.event}</span>
                                             </div>
                                         </div>
                                     ))}

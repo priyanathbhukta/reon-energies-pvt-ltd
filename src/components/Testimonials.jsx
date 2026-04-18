@@ -12,12 +12,12 @@ const FALLBACK_TESTIMONIALS = [
 ]
 
 const FALLBACK_GALLERY = [
-    { id: 1, image_url: 'https://images.unsplash.com/photo-1509391366360-2e959784a276?w=600&q=80', alt_text: 'Rooftop solar installation', label: 'Residential Installation' },
-    { id: 2, image_url: 'https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?w=600&q=80', alt_text: 'Commercial solar', label: 'Commercial Rooftop' },
-    { id: 3, image_url: 'https://images.unsplash.com/photo-1473341304170-971dccb5ac1e?w=600&q=80', alt_text: 'Solar water pump', label: 'Solar Water Pump' },
-    { id: 4, image_url: 'https://images.unsplash.com/photo-1497440001374-f26997328c1b?w=600&q=80', alt_text: 'Industrial solar', label: 'Industrial Solar Plant' },
-    { id: 5, image_url: 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=600&q=80', alt_text: 'Battery storage', label: 'Battery Storage System' },
-    { id: 6, image_url: 'https://images.unsplash.com/photo-1605980776566-e6ec37f4b5e4?w=600&q=80', alt_text: 'Ground mount', label: 'Ground-Mount Array' },
+    { id: 1, image_url: '/assets/hero_rooftop_solar.png', alt_text: 'Rooftop solar installation', label: 'Residential Installation' },
+    { id: 2, image_url: '/assets/gallery_commercial_roof.png', alt_text: 'Commercial solar', label: 'Commercial Rooftop' },
+    { id: 3, image_url: '/assets/product_pump_system.png', alt_text: 'Solar water pump', label: 'Solar Water Pump' },
+    { id: 4, image_url: '/assets/gallery_industrial_plant.png', alt_text: 'Industrial solar', label: 'Industrial Solar Plant' },
+    { id: 5, image_url: '/assets/product_battery_rack.png', alt_text: 'Battery storage', label: 'Battery Storage System' },
+    { id: 6, image_url: '/assets/product_bifacial.png', alt_text: 'Ground mount', label: 'Ground-Mount Array' },
 ]
 
 export default function Testimonials() {

@@ -4,14 +4,13 @@ import { API } from '../../api'
 import {
     Users, UserCheck, UserPlus, TrendingUp, IndianRupee,
     LogOut, RefreshCw, Search, Trash2,
-    BarChart3, Zap, Phone, Mail, MapPin,
+    BarChart3, Phone, Mail, MapPin,
     ArrowUpRight, ArrowDownRight, Filter,
     LayoutGrid, MessageSquare, Image, FileText,
-    Plus, X, Save, Edit2, Star, Calculator, ClipboardList, FileDown
+    Plus, X, Save, Edit2, Star, Calculator, ClipboardList, FileDown,
+    Briefcase
 } from 'lucide-react'
-import CreateQuotation from './quotation/CreateQuotation'
-import TemplateManager from './quotation/TemplateManager'
-import QuotationHistory from './quotation/QuotationHistory'
+import QuotationForm from './QuotationForm'
 
 const STATUS_CONFIG = {
     new: { label: 'New', color: 'bg-blue-100 text-blue-700' },
@@ -25,6 +24,7 @@ const TABS = [
     { id: 'schemes', label: 'Schemes', icon: FileText },
     { id: 'testimonials', label: 'Testimonials', icon: MessageSquare },
     { id: 'gallery', label: 'Gallery', icon: Image },
+    { id: 'directors', label: 'Directors', icon: Briefcase },
     { id: 'quotation', label: 'Quotation Generator', icon: Calculator },
 ]
 
@@ -36,6 +36,7 @@ export default function AdminDashboard() {
     const [schemes, setSchemes] = useState([])
     const [testimonials, setTestimonials] = useState([])
     const [gallery, setGallery] = useState([])
+    const [directors, setDirectors] = useState([])
     const [loading, setLoading] = useState(true)
     const [filter, setFilter] = useState('all')
     const [searchTerm, setSearchTerm] = useState('')
@@ -54,12 +55,13 @@ export default function AdminDashboard() {
     const fetchAll = async () => {
         setLoading(true)
         try {
-            const [statsRes, enquiriesRes, schemesRes, testimonialsRes, galleryRes] = await Promise.all([
+            const [statsRes, enquiriesRes, schemesRes, testimonialsRes, galleryRes, directorsRes] = await Promise.all([
                 fetch(`${API}/api/dashboard/stats`, { headers }),
                 fetch(`${API}/api/enquiries`, { headers }),
                 fetch(`${API}/api/content/schemes`, { headers }),
                 fetch(`${API}/api/content/testimonials`, { headers }),
                 fetch(`${API}/api/content/gallery`, { headers }),
+                fetch(`${API}/api/content/directors`, { headers }),
             ])
             if (statsRes.status === 401) { localStorage.removeItem('reon_admin_token'); navigate('/admin/login'); return }
             setStats(await statsRes.json())
@@ -67,6 +69,7 @@ export default function AdminDashboard() {
             setSchemes(await schemesRes.json())
             setTestimonials(await testimonialsRes.json())
             setGallery(await galleryRes.json())
+            setDirectors(await directorsRes.json())
         } catch (err) { console.error('Fetch error:', err) }
         finally { setLoading(false) }
     }
@@ -140,8 +143,8 @@ export default function AdminDashboard() {
             <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
                 <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
                     <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 bg-emerald/10 rounded-xl flex items-center justify-center">
-                            <Zap className="w-5 h-5 text-emerald" />
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden border border-gray-100 shadow-sm p-1 bg-white">
+                            <img src="/admin-logo.jpg" alt="REON Logo" className="w-full h-full object-contain" />
                         </div>
                         <div>
                             <h1 className="text-lg font-display font-bold text-navy leading-tight">REON Admin</h1>
@@ -205,7 +208,7 @@ export default function AdminDashboard() {
                                 <span className={`text-xs px-1.5 py-0.5 rounded-full ${
                                     activeTab === tab.id ? 'bg-white/20' : 'bg-gray-100'
                                 }`}>
-                                    {tab.id === 'enquiries' ? enquiries.length : tab.id === 'schemes' ? schemes.length : tab.id === 'testimonials' ? testimonials.length : gallery.length}
+                                    {tab.id === 'enquiries' ? enquiries.length : tab.id === 'schemes' ? schemes.length : tab.id === 'testimonials' ? testimonials.length : tab.id === 'directors' ? directors.length : gallery.length}
                                 </span>
                             )}
                         </button>
@@ -217,6 +220,7 @@ export default function AdminDashboard() {
                 {activeTab === 'schemes' && <SchemesTab schemes={schemes} onEdit={(s) => setEditModal({ type: 'schemes', data: s, isNew: false })} onAdd={() => setEditModal({ type: 'schemes', data: { icon: '☀️', badge: '', name: '', tagline: '', eligibility: [''], subsidy_breakdown: [{ label: '', value: '' }], reon_help: [''], total_subsidy: '', accent: 'from-emerald-700 to-emerald-600', featured: false, sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('schemes', id)} />}
                 {activeTab === 'testimonials' && <TestimonialsTab testimonials={testimonials} onEdit={(t) => setEditModal({ type: 'testimonials', data: t, isNew: false })} onAdd={() => setEditModal({ type: 'testimonials', data: { name: '', role: '', rating: 5, review: '', avatar_initials: '', avatar_color: 'bg-emerald', date_label: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('testimonials', id)} />}
                 {activeTab === 'gallery' && <GalleryTab gallery={gallery} onEdit={(g) => setEditModal({ type: 'gallery', data: g, isNew: false })} onAdd={() => setEditModal({ type: 'gallery', data: { image_url: '', alt_text: '', label: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('gallery', id)} />}
+                {activeTab === 'directors' && <DirectorsTab directors={directors} onEdit={(d) => setEditModal({ type: 'directors', data: d, isNew: false })} onAdd={() => setEditModal({ type: 'directors', data: { name: '', role: '', description: '', image_url: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('directors', id)} />}
                 {activeTab === 'quotation' && <QuotationTab />}
             </main>
 
@@ -232,40 +236,11 @@ export default function AdminDashboard() {
     )
 }
 
-// ========== QUOTATION TAB (Sub-navigation wrapper) ==========
+// ========== QUOTATION TAB ==========
 function QuotationTab() {
-    const [subTab, setSubTab] = useState('create')
-
-    const SUB_TABS = [
-        { id: 'create', label: 'Create Quotation', icon: Calculator },
-        { id: 'templates', label: 'Template Manager', icon: FileDown },
-        { id: 'history', label: 'Quotation History', icon: ClipboardList },
-    ]
-
     return (
         <div className="space-y-5">
-            {/* Sub-tab nav */}
-            <div className="flex items-center gap-1 bg-white rounded-2xl p-1.5 border border-gray-100 shadow-sm overflow-x-auto">
-                {SUB_TABS.map(tab => (
-                    <button
-                        key={tab.id}
-                        onClick={() => setSubTab(tab.id)}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
-                            subTab === tab.id
-                                ? 'bg-navy text-white shadow-sm'
-                                : 'text-gray-500 hover:text-navy hover:bg-gray-50'
-                        }`}
-                    >
-                        <tab.icon className="w-4 h-4" />
-                        {tab.label}
-                    </button>
-                ))}
-            </div>
-
-            {/* Sub-tab content */}
-            {subTab === 'create' && <CreateQuotation />}
-            {subTab === 'templates' && <TemplateManager />}
-            {subTab === 'history' && <QuotationHistory />}
+            <QuotationForm />
         </div>
     )
 }
@@ -525,6 +500,64 @@ function GalleryTab({ gallery, onEdit, onAdd, onDelete }) {
     )
 }
 
+// ========== DIRECTORS TAB ==========
+function DirectorsTab({ directors, onEdit, onAdd, onDelete }) {
+    return (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+                <div>
+                    <h2 className="text-lg font-display font-bold text-navy">Manage Directors</h2>
+                    <p className="text-sm text-gray-400">{directors.length} directors</p>
+                </div>
+                <button onClick={onAdd} className="flex items-center gap-2 bg-emerald text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-emerald-600 transition-colors">
+                    <Plus className="w-4 h-4" /> Add Director
+                </button>
+            </div>
+            <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                    <thead>
+                        <tr className="border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400 font-semibold">
+                            <th className="text-left py-3 px-5">Director</th>
+                            <th className="text-left py-3 px-3 hidden md:table-cell">Description</th>
+                            <th className="text-left py-3 px-3">Order</th>
+                            <th className="text-right py-3 px-5">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {directors.map(d => (
+                            <tr key={d.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                                <td className="py-3.5 px-5">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full overflow-hidden border border-gray-200">
+                                            {d.image_url ? (
+                                                <img src={d.image_url} alt={d.name} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="w-full h-full bg-emerald flex items-center justify-center text-white font-bold">{d.name?.[0] || 'D'}</div>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <p className="font-semibold text-navy">{d.name}</p>
+                                            <p className="text-xs text-gray-400">{d.role}</p>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td className="py-3.5 px-3 hidden md:table-cell"><p className="text-gray-500 text-xs truncate max-w-[300px]">{d.description}</p></td>
+                                <td className="py-3.5 px-3 text-gray-500">{d.sort_order}</td>
+                                <td className="py-3.5 px-5 text-right">
+                                    <div className="flex items-center justify-end gap-1">
+                                        <button onClick={() => onEdit(d)} className="p-1.5 text-gray-400 hover:text-emerald hover:bg-emerald/5 rounded-lg transition-colors"><Edit2 className="w-4 h-4" /></button>
+                                        <button onClick={() => onDelete(d.id)} className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    )
+}
+
 // ========== EDIT MODAL ==========
 function EditModal({ modal, onClose, onSave }) {
     const [form, setForm] = useState(modal.data)
@@ -553,7 +586,7 @@ function EditModal({ modal, onClose, onSave }) {
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mb-10 animate-fade-in">
                 <div className="flex items-center justify-between p-5 border-b border-gray-100">
                     <h3 className="text-lg font-display font-bold text-navy">
-                        {isNew ? 'Add' : 'Edit'} {type === 'schemes' ? 'Scheme' : type === 'testimonials' ? 'Testimonial' : 'Gallery Image'}
+                        {isNew ? 'Add' : 'Edit'} {type === 'schemes' ? 'Scheme' : type === 'testimonials' ? 'Testimonial' : type === 'directors' ? 'Director' : 'Gallery Image'}
                     </h3>
                     <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
                 </div>
@@ -697,6 +730,38 @@ function EditModal({ modal, onClose, onSave }) {
                                 <label className="block text-xs font-semibold text-gray-500 mb-1">Alt Text</label>
                                 <input value={form.alt_text || ''} onChange={e => set('alt_text', e.target.value)} className="input-field text-sm" />
                             </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 mb-1">Sort Order</label>
+                                <input type="number" value={form.sort_order || 0} onChange={e => set('sort_order', parseInt(e.target.value))} className="input-field text-sm" />
+                            </div>
+                        </>
+                    )}
+
+                    {type === 'directors' && (
+                        <>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 mb-1">Name *</label>
+                                    <input value={form.name || ''} onChange={e => set('name', e.target.value)} className="input-field text-sm" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 mb-1">Role *</label>
+                                    <input value={form.role || ''} onChange={e => set('role', e.target.value)} className="input-field text-sm" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 mb-1">Description</label>
+                                <textarea value={form.description || ''} onChange={e => set('description', e.target.value)} rows={3} className="input-field text-sm resize-none" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 mb-1">Image URL</label>
+                                <input value={form.image_url || ''} onChange={e => set('image_url', e.target.value)} className="input-field text-sm" placeholder="https://..." />
+                            </div>
+                            {form.image_url && (
+                                <div className="rounded-xl overflow-hidden border border-gray-200">
+                                    <img src={form.image_url} alt="Preview" className="w-32 h-32 object-cover" />
+                                </div>
+                            )}
                             <div>
                                 <label className="block text-xs font-semibold text-gray-500 mb-1">Sort Order</label>
                                 <input type="number" value={form.sort_order || 0} onChange={e => set('sort_order', parseInt(e.target.value))} className="input-field text-sm" />

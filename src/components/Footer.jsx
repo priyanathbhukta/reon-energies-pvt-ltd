@@ -52,9 +52,10 @@ export default function Footer() {
                         <a href="#" className="flex items-center mb-4 group" aria-label="REON Energies Home"
                             onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }) }}>
                             <img
-                                src="/logo.png"
-                                alt="REON Energies Pvt Ltd logo"
-                                className="h-14 w-auto object-contain group-hover:scale-105 transition-transform duration-200"
+                                src="/logo_final_cropped.png"
+                                alt="REON Energies Pvt Ltd - Solar Energy Company West Bengal"
+                                className="h-12 w-auto object-contain block group-hover:scale-105 transition-transform duration-200"
+                                loading="lazy"
                             />
                         </a>
                         <p className="text-white/55 text-sm leading-relaxed mb-6">

@@ -1,15 +1,19 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 import enquiriesRouter from './routes/enquiries.js';
 import authRouter from './routes/auth.js';
 import dashboardRouter from './routes/dashboard.js';
 import contentRouter from './routes/content.js';
-import quotationRouter from './modules/quotation/routes.js';
+import adminQuotationsRouter from './routes/admin_quotations.js';
+import authMiddleware from './middleware/auth.js';
 
 dotenv.config();
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -41,7 +45,10 @@ app.use('/api/enquiries', enquiriesRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/content', contentRouter);
-app.use('/api', quotationRouter); // Quotation Generator module
+app.use('/api/admin/quotations', authMiddleware, adminQuotationsRouter);
+
+// Serve generated quotation PDFs as static files
+app.use('/pdfs', express.static(path.join(__dirname, 'pdfs')));
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -6,7 +6,7 @@ const products = [
         id: 'mono-perc',
         name: 'Mono PERC Solar Panel',
         // Close-up of solar panel cells — matches well
-        image: 'https://images.unsplash.com/photo-1466611653911-95081537e5b7?w=600&q=80',
+        image: '/assets/product_mono_perc.png',
         specs: ['450W–550W Output', '21.5% Efficiency', '25-Year Warranty'],
         price: '₹18,000 – ₹22,000',
         unit: 'per panel',
@@ -19,9 +19,9 @@ const products = [
         id: 'bifacial',
         name: 'Bifacial Solar Panel',
         // Ground-mounted solar array — exactly fits bifacial field installations
-        image: 'https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?w=600&q=80',
+        image: '/assets/product_bifacial.png',
         specs: ['520W–600W Output', '22.8% Efficiency', '30-Year Warranty'],
-        price: '₹24,000 – ₹30,000',
+        price: '₹9,400 – ₹10,600',
         unit: 'per panel',
         description:
             'Captures sunlight from both sides for superior energy generation. Best suited for ground-mounted and industrial installations where reflected light is available.',
@@ -32,9 +32,9 @@ const products = [
         id: 'string-inverter',
         name: 'String Solar Inverter',
         // Electrical panel / inverter equipment
-        image: 'https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?w=600&q=80',
-        specs: ['3kW – 100kW', '98.4% Efficiency', 'WiFi Monitoring'],
-        price: '₹12,000 – ₹1,80,000',
+        image: '/assets/product_inverter.png',
+        specs: ['3kW – 9kW', '98.4% Efficiency', 'WiFi Monitoring'],
+        price: '₹12,000 – ₹17,900',
         unit: 'per unit',
         description:
             'Reliable string inverters for residential and commercial systems. Features built-in WiFi monitoring, rapid shutdown, and MPPT for optimal performance.',
@@ -45,9 +45,9 @@ const products = [
         id: 'solar-pump',
         name: 'Solar Water Pump System',
         // Water pump / irrigation field with canal
-        image: 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=600&q=80',
-        specs: ['1HP – 10HP', 'AC/DC Pump', 'Remote Control'],
-        price: '₹45,000 – ₹2,50,000',
+        image: '/assets/product_pump_system.png',
+        specs: ['1HP – 5HP', 'AC/DC Pump', 'Remote Control'],
+        price: '₹45,000 – ₹1,00,000',
         unit: 'per system',
         description:
             'Complete solar pumping systems for agriculture and water supply. MNRE-approved, durable for harsh outdoor conditions with optional IoT-enabled remote control.',
@@ -58,9 +58,9 @@ const products = [
         id: 'battery',
         name: 'Solar Battery (LiFePO4)',
         // Battery / energy storage unit close-up
-        image: 'https://images.unsplash.com/photo-1593941707882-a5bba14938c7?w=600&q=80',
-        specs: ['5kWh – 20kWh', '6000+ Cycles', '10-Year Warranty'],
-        price: '₹55,000 – ₹2,20,000',
+        image: '/assets/product_battery_rack.png',
+        specs: ['5kWh – 10kWh', '6000+ Cycles', '10-Year Warranty'],
+        price: '₹55,000 – ₹1,20,000',
         unit: 'per unit',
         description:
             'Lithium iron phosphate batteries for reliable solar energy storage. Safe, long-lasting, and compatible with all major hybrid and off-grid inverters.',
@@ -71,9 +71,9 @@ const products = [
         id: 'structure',
         name: 'Mounting Structure',
         // Rooftop solar mounting frames / aluminum channel structure
-        image: 'https://images.unsplash.com/photo-1509391366360-2e959784a276?w=600&q=80',
+        image: '/assets/product_mounting_structure.png',
         specs: ['Hot-Dip Galvanized', '25-Year Life', 'Custom Angles'],
-        price: '₹8,000 – ₹25,000',
+        price: '₹8,000 – ₹13,000',
         unit: 'per kW',
         description:
             'Powder-coated and galvanized mounting structures engineered for Indian weather conditions. Available for rooftop, ground-mount, and elevated canopy installations.',
