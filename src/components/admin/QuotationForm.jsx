@@ -1,5 +1,7 @@
 // frontend/src/components/QuotationForm.jsx
 import React, { useState, useEffect } from 'react';
+import { API } from '../../api';
+
 
 /* ── Colour tokens matching the REON brand ──────────────────────────────── */
 const C = {
@@ -227,7 +229,7 @@ export default function QuotationForm() {
         financeParameters: form.payment_mode === 'EMI / Loan' && financeSim ? financeSim : null,
       };
 
-      const response = await fetch('http://localhost:5000/api/admin/quotations', {
+      const response = await fetch(`${API}/api/admin/quotations`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

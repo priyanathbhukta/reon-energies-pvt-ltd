@@ -814,7 +814,7 @@ def _page_clients(data: dict, S: dict) -> list:
     
     gst_contact_text = (
         "<font color='#1B2D5B' size='9'><b>GST Details</b></font><br/><br/>"
-        "<b>Registration Number:</b> 19AAPCR6346E1ZY<br/><br/><br/>"
+        "<b>Registration Number:</b> 19AAPCR6346E2ZX<br/><br/><br/>"
         "<font color='#1B2D5B' size='9'><b>Contact Details</b></font><br/><br/>"
         "<b>Phone:</b> +91 8436649991<br/>"
         "<b>Email:</b> info@reonenergy.in<br/>"
