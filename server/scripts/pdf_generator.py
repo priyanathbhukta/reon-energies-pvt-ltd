@@ -47,8 +47,8 @@ _FONT_CHOICES = [
     ("/Library/Fonts/Arial.ttf", "/Library/Fonts/Arial Bold.ttf")
 ]
 
-# Register Unicode-capable fonts (needed for {_RUPEE}symbol)
-_RUPEE = _RUPEE
+# Register Unicode-capable fonts (needed for ₹ symbol)
+_RUPEE = "₹ "
 
 def _register_fonts():
     global _RUPEE
