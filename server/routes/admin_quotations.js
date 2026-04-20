@@ -14,7 +14,13 @@ function getBaseUrl(req) {
   // Render / Nginx set x-forwarded-proto and x-forwarded-host
   const proto = req.headers['x-forwarded-proto'] || req.protocol;
   const host  = req.headers['x-forwarded-host']  || req.get('host');
-  // Use the environment variable if explicitly set (most reliable)
+  
+  // If we are running locally, ignore PUBLIC_BASE_URL override so local testing works
+  if (host.includes('localhost') || host.includes('127.0.0.1')) {
+    return `${proto}://${host}`;
+  }
+  
+  // Use the environment variable if explicitly set (most reliable in prod)
   if (process.env.PUBLIC_BASE_URL) return process.env.PUBLIC_BASE_URL.replace(/\/$/, '');
   return `${proto}://${host}`;
 }

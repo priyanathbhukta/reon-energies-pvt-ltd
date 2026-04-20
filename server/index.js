@@ -30,7 +30,7 @@ function ensurePythonDeps() {
   try {
     console.log('🐍 Checking / installing Python PDF dependencies...');
     execSync(
-      'pip3 install --no-cache-dir ' +
+      'pip3 install --no-cache-dir --break-system-packages ' +
       '"reportlab>=4.2.0,<5.0" ' +
       '"pypdf>=4.0.0,<5.0" ' +
       '"Pillow>=10.0.0,<12.0"',

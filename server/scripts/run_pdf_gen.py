@@ -27,7 +27,8 @@ def _ensure_deps():
     if missing:
         print(f"[run_pdf_gen] Installing missing packages: {missing}", file=sys.stderr)
         subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "--no-cache-dir"] + missing,
+            [sys.executable, "-m", "pip", "install", "--no-cache-dir",
+             "--break-system-packages"] + missing,
             stdout=subprocess.DEVNULL,
             stderr=sys.stderr,
         )

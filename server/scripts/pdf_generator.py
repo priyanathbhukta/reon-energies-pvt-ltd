@@ -47,8 +47,11 @@ _FONT_CHOICES = [
     ("/Library/Fonts/Arial.ttf", "/Library/Fonts/Arial Bold.ttf")
 ]
 
-# Register Unicode-capable fonts (needed for ₹ symbol)
+# Register Unicode-capable fonts (needed for {_RUPEE}symbol)
+_RUPEE = _RUPEE
+
 def _register_fonts():
+    global _RUPEE
     for r_path, b_path in _FONT_CHOICES:
         if os.path.exists(r_path) and os.path.exists(b_path):
             try:
@@ -58,6 +61,16 @@ def _register_fonts():
                 return True
             except Exception:
                 continue
+    # BULLETPROOF FALLBACK: if no TTF fonts are found, use standard PDF fonts
+    # and replace the Rupee symbol with 'Rs. ' to avoid UnicodeEncodeError.
+    try:
+        from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+        pdfmetrics.registerFont(UnicodeCIDFont('Helvetica'))
+        pdfmetrics.registerFontFamily("DV", normal="Helvetica", bold="Helvetica-Bold")
+    except Exception:
+        # Absolute last resort (standard fonts)
+        pdfmetrics.registerFontFamily("DV", normal="Helvetica", bold="Helvetica-Bold")
+    _RUPEE = "Rs. "
     return False
 
 _register_fonts()
@@ -394,7 +407,7 @@ def _page_summary(data: dict, S: dict) -> list:
         ("Roof / Ground Type",  data.get("roof_type", "")),
         ("Project Category",    data.get("project_category", "Residential")),
         ("Electricity Provider",data.get("electricity_provider", "")),
-        ("Monthly Bill",        "₹ " + str(data.get("monthly_bill", ""))),
+        ("Monthly Bill",        _RUPEE + str(data.get("monthly_bill", ""))),
         ("Power Factor",        data.get("power_factor", "")),
     ]
     b_brand = data.get("battery_brand", "").strip()
@@ -436,8 +449,8 @@ def _page_summary(data: dict, S: dict) -> list:
     comm_hdr  = ["Description", "Qty", "Base Price", "GST @ 5%"]
     comm_data = [[Paragraph(desc_txt, S["tbl_cell"]),
                   Paragraph("1 Set",   S["tbl_cell_c"]),
-                  Paragraph("₹ " + data.get("base_price", "1,60,000"), S["tbl_cell_c"]),
-                  Paragraph("₹ " + data.get("gst_amount",  "8,000"),   S["tbl_cell_c"])]]
+                  Paragraph(_RUPEE + data.get("base_price", "1,60,000"), S["tbl_cell_c"]),
+                  Paragraph(_RUPEE + data.get("gst_amount",  "8,000"),   S["tbl_cell_c"])]]
     cw = [CONTENT_W*0.52, CONTENT_W*0.12, CONTENT_W*0.20, CONTENT_W*0.16]
 
     ts = TableStyle(_BASE_TS + [
@@ -451,7 +464,7 @@ def _page_summary(data: dict, S: dict) -> list:
     # Total bar
     total_para = Paragraph(
         f'<font color="white"><b>  Total Price Including GST:  '
-        f'₹ {data.get("total_price","1,68,000")} /-</b></font>',
+        f'{_RUPEE}{data.get("total_price","1,68,000")} /-</b></font>',
         ParagraphStyle("tot", fontSize=10.5, fontName="DVB",
                        alignment=TA_RIGHT, textColor=white, rightIndent=6)
     )
@@ -473,9 +486,9 @@ def _page_summary(data: dict, S: dict) -> list:
             ten = int(finance.get("tenure", 0))
             emi = float(finance.get("emiAmount", 0))
             emi_text = (
-                f"<b>EMI / LOAN FINANCING:</b>  Down Payment: ₹ {dp:,.0f}  |  "
-                f"Loan: ₹ {loan:,.0f}  |  ROI: {roi}%  |  "
-                f"Tenure: {ten} months  |  <b>Monthly EMI: ₹ {emi:,.0f}</b>"
+                f"<b>EMI / LOAN FINANCING:</b>  Down Payment: {_RUPEE}{dp:,.0f}  |  "
+                f"Loan: {_RUPEE}{loan:,.0f}  |  ROI: {roi}%  |  "
+                f"Tenure: {ten} months  |  <b>Monthly EMI: {_RUPEE}{emi:,.0f}</b>"
             )
             emi_para = Paragraph(
                 f'<font color="white">{emi_text}</font>',
@@ -528,8 +541,8 @@ def _page_roi_emi(data: dict, S: dict) -> list:
         ("System Capacity",                 f"{kw:,.1f} kWp"),
         ("Estimated Daily Generation",      f"~ {daily_gen:,.1f} Units (kWh)"),
         ("Estimated Yearly Generation",    f"~ {yearly_gen:,.0f} Units (kWh)"),
-        ("Assumed Electricity Rate",        f"₹ {rate_per_unit:,.2f} / Unit"),
-        ("Estimated Annual Savings",        f"₹ {annual_savings:,.0f}")
+        ("Assumed Electricity Rate",        f"{_RUPEE}{rate_per_unit:,.2f} / Unit"),
+        ("Estimated Annual Savings",        f"{_RUPEE}{annual_savings:,.0f}")
     ]
     elems.append(_info2("Generation & Savings Profile", energy_rows, S))
     elems.append(Spacer(1, 12))
@@ -564,7 +577,7 @@ def _page_roi_emi(data: dict, S: dict) -> list:
     ))
     elems.append(HRFlowable(width=CONTENT_W, thickness=1.5, color=NAVY, spaceAfter=8))
     
-    elems.append(Paragraph(f"Calculated on a proposed loan amount of <b>₹ {loan_amount:,.0f}</b>.", S["body"]))
+    elems.append(Paragraph(f"Calculated on a proposed loan amount of <b>{_RUPEE}{loan_amount:,.0f}</b>.", S["body"]))
     elems.append(Spacer(1, 8))
 
     def calc_emi(p, r_yearly, years):
@@ -585,22 +598,22 @@ def _page_roi_emi(data: dict, S: dict) -> list:
 
     opt_texts = [
         (f"🔸 Option 1: 3 Years Tenure", 
-         f"<b>EMI:</b> ₹ {emi_data[0]['emi']:,.0f}/month<br/>"
-         f"<b>Annual EMI:</b> ₹ {emi_data[0]['ann_emi']:,.0f}<br/>"
-         f"<b>Net Annual Saving:</b> {'₹ ' + format(emi_data[0]['net'], ',.0f') if emi_data[0]['net'] > 0 else '-₹ ' + format(abs(emi_data[0]['net']), ',.0f')} approx<br/>"
+         f"<b>EMI:</b> {_RUPEE}{emi_data[0]['emi']:,.0f}/month<br/>"
+         f"<b>Annual EMI:</b> {_RUPEE}{emi_data[0]['ann_emi']:,.0f}<br/>"
+         f"<b>Net Annual Saving:</b> {_RUPEE + format(emi_data[0]['net'], ',.0f') if emi_data[0]['net'] > 0 else '-{_RUPEE}' + format(abs(emi_data[0]['net']), ',.0f')} approx<br/>"
          f"<font color='#1D6B1D'>✔ Fastest loan closure</font><br/>"
          f"<font color='#C0392B'>❗ Lowest initial liquidity / profit</font>"),
          
         (f"🔸 Option 2: 4 Years Tenure ⭐ (Recommended)", 
-         f"<b>EMI:</b> ₹ {emi_data[1]['emi']:,.0f}/month<br/>"
-         f"<b>Annual EMI:</b> ₹ {emi_data[1]['ann_emi']:,.0f}<br/>"
-         f"<b>Net Annual Saving:</b> {'₹ ' + format(emi_data[1]['net'], ',.0f') if emi_data[1]['net'] > 0 else '-₹ ' + format(abs(emi_data[1]['net']), ',.0f')} approx<br/>"
+         f"<b>EMI:</b> {_RUPEE}{emi_data[1]['emi']:,.0f}/month<br/>"
+         f"<b>Annual EMI:</b> {_RUPEE}{emi_data[1]['ann_emi']:,.0f}<br/>"
+         f"<b>Net Annual Saving:</b> {_RUPEE + format(emi_data[1]['net'], ',.0f') if emi_data[1]['net'] > 0 else '-{_RUPEE}' + format(abs(emi_data[1]['net']), ',.0f')} approx<br/>"
          f"<font color='#1D6B1D'>✔ Best balance between EMI & net savings</font>"),
 
         (f"🔸 Option 3: 5 Years Tenure", 
-         f"<b>EMI:</b> ₹ {emi_data[2]['emi']:,.0f}/month<br/>"
-         f"<b>Annual EMI:</b> ₹ {emi_data[2]['ann_emi']:,.0f}<br/>"
-         f"<b>Net Annual Saving:</b> {'₹ ' + format(emi_data[2]['net'], ',.0f') if emi_data[2]['net'] > 0 else '-₹ ' + format(abs(emi_data[2]['net']), ',.0f')} approx<br/>"
+         f"<b>EMI:</b> {_RUPEE}{emi_data[2]['emi']:,.0f}/month<br/>"
+         f"<b>Annual EMI:</b> {_RUPEE}{emi_data[2]['ann_emi']:,.0f}<br/>"
+         f"<b>Net Annual Saving:</b> {_RUPEE + format(emi_data[2]['net'], ',.0f') if emi_data[2]['net'] > 0 else '-{_RUPEE}' + format(abs(emi_data[2]['net']), ',.0f')} approx<br/>"
          f"<font color='#1D6B1D'>✔ Maximum monthly liquidity</font><br/>"
          f"<font color='#C0392B'>❗ Higher total interest paid over tenure</font>"),
     ]
@@ -620,8 +633,8 @@ def _page_roi_emi(data: dict, S: dict) -> list:
         sym = "-" if val < 0 else ""
         v = abs(val)
         if v >= 100000:
-            return f"{sym}₹ {v/100000:.2f}L"
-        return f"{sym}₹ {v/1000:.1f}K"
+            return f"{sym}{_RUPEE}{v/100000:.2f}L"
+        return f"{sym}{_RUPEE}{v/1000:.1f}K"
         
     rows = [
         [f"{d['year']} Year", 
@@ -748,9 +761,9 @@ def _page_warranty(data: dict, S: dict) -> list:
             ten = int(finance.get("tenure", 0))
             emi = float(finance.get("emiAmount", 0))
             payment_terms = [
-                f"Down Payment of ₹ {dp:,.0f} at the time of Purchase Order/Agreement signing.",
-                f"Loan Amount of ₹ {loan:,.0f} successfully arranged and sanctioned.",
-                f"Monthly EMI stands at ₹ {emi:,.0f} for a tenure of {ten} months at {roi}% ROI.",
+                f"Down Payment of {_RUPEE}{dp:,.0f} at the time of Purchase Order/Agreement signing.",
+                f"Loan Amount of {_RUPEE}{loan:,.0f} successfully arranged and sanctioned.",
+                f"Monthly EMI stands at {_RUPEE}{emi:,.0f} for a tenure of {ten} months at {roi}% ROI.",
                 "EMI cycle starts based on bank/NBFC disbursement terms post commissioning."
             ]
         except Exception:
