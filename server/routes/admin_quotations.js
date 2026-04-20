@@ -8,6 +8,16 @@ import pool from '../db.js';
 
 const execFileAsync = util.promisify(execFile);
 const router = express.Router();
+
+// ── Helper: resolve the correct public base URL even behind a reverse proxy ──
+function getBaseUrl(req) {
+  // Render / Nginx set x-forwarded-proto and x-forwarded-host
+  const proto = req.headers['x-forwarded-proto'] || req.protocol;
+  const host  = req.headers['x-forwarded-host']  || req.get('host');
+  // Use the environment variable if explicitly set (most reliable)
+  if (process.env.PUBLIC_BASE_URL) return process.env.PUBLIC_BASE_URL.replace(/\/$/, '');
+  return `${proto}://${host}`;
+}
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // The Python script wrapper path
@@ -34,14 +44,27 @@ router.post('/', async (req, res) => {
 
   try {
     // 1. Generate PDF via Python
-    await execFileAsync(runPythonCommand, [SCRIPT_PATH, '--output', localPdfPath], {
-      env: { ...process.env, REON_QUOTE_JSON: JSON.stringify(data) },
-    });
+    const jsonPayload = JSON.stringify(data);
+    console.log(`[PDF] Generating: ${pdfFileName} | payload size: ${jsonPayload.length} bytes`);
+
+    const { stdout, stderr } = await execFileAsync(
+      runPythonCommand,
+      [SCRIPT_PATH, '--output', localPdfPath],
+      {
+        env: { ...process.env, REON_QUOTE_JSON: jsonPayload },
+        timeout: 60000,          // 60-second limit
+        maxBuffer: 5 * 1024 * 1024, // 5 MB stdout/stderr buffer
+      }
+    );
+
+    if (stderr && stderr.trim()) {
+      console.warn('[PDF] Python stderr:', stderr.trim());
+    }
+    console.log('[PDF] Python stdout:', stdout.trim());
 
     // 2. Build a URL to download the PDF from our static /pdfs route
-    const protocol = req.protocol;
-    const host = req.get('host');
-    const pdfUrl = `${protocol}://${host}/pdfs/${pdfFileName}`;
+    // Uses x-forwarded-proto/host so the URL is correct behind Nginx / Render
+    const pdfUrl = `${getBaseUrl(req)}/pdfs/${pdfFileName}`;
 
     // 3. Save to Database
     const {
@@ -95,16 +118,37 @@ router.post('/', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Quotation Generation Failed:', error);
+    // Log full error details for debugging production issues
+    console.error('[PDF] Quotation Generation Failed:');
+    console.error('  message :', error.message);
+    console.error('  code    :', error.code);
+    if (error.stderr) console.error('  stderr  :', error.stderr);
+    if (error.stdout) console.error('  stdout  :', error.stdout);
+    console.error('  stack   :', error.stack);
+
     // Cleanup on failure
-    if (fs.existsSync(localPdfPath)) fs.unlinkSync(localPdfPath);
-    
-    // Check if the error is a PostgreSQL unique constraint violation (duplicate quotation number)
+    try {
+      if (fs.existsSync(localPdfPath)) fs.unlinkSync(localPdfPath);
+    } catch (_) {}
+
+    // PostgreSQL unique constraint violation (duplicate quotation number)
     if (error.code === '23505') {
-      return res.status(400).json({ error: 'This Quotation Sequence Number has already been used. Please specify a new 3-digit sequence number.' });
+      return res.status(400).json({
+        error: 'This Quotation Sequence Number has already been used. Please specify a new 3-digit sequence number.'
+      });
     }
-    
-    res.status(500).json({ error: 'Failed to process quotation request', details: error.message });
+
+    // Python process timed out
+    if (error.killed || error.code === 'ETIMEDOUT') {
+      return res.status(500).json({ error: 'PDF generation timed out. Please try again.' });
+    }
+
+    // Python script exited with non-zero code — stderr has the real error
+    const pyError = error.stderr ? error.stderr.trim() : error.message;
+    res.status(500).json({
+      error: 'Failed to process quotation request',
+      details: pyError || error.message,
+    });
   }
 });
 
