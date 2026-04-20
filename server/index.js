@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
 
 import enquiriesRouter from './routes/enquiries.js';
 import authRouter from './routes/auth.js';
@@ -16,6 +17,34 @@ dotenv.config();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// ── Auto-install Python PDF dependencies on Linux/Render ──────────────────────
+// This runs synchronously at startup so the packages are ready before any
+// request is handled. On Windows (local dev) we skip this since you install
+// manually. Safe to run repeatedly — pip is idempotent.
+function ensurePythonDeps() {
+  if (process.platform === 'win32') {
+    console.log('⏭️  Skipping pip install on Windows (local dev).');
+    return;
+  }
+  try {
+    console.log('🐍 Checking / installing Python PDF dependencies...');
+    execSync(
+      'pip3 install --no-cache-dir ' +
+      '"reportlab>=4.2.0,<5.0" ' +
+      '"pypdf>=4.0.0,<5.0" ' +
+      '"Pillow>=10.0.0,<12.0"',
+      { stdio: 'inherit', timeout: 120000 }
+    );
+    console.log('✅ Python PDF dependencies are ready.');
+  } catch (err) {
+    console.error('❌ Failed to install Python dependencies:', err.message);
+    console.error('   PDF generation will not work until reportlab/pypdf/Pillow are installed.');
+    // Don't crash the server — other endpoints still work
+  }
+}
+
+ensurePythonDeps();
 
 // Middleware
 const allowedOrigins = [
