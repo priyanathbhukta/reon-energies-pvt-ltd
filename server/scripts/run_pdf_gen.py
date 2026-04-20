@@ -6,12 +6,43 @@ Data is passed via the REON_QUOTE_JSON environment variable (JSON string).
 """
 import os
 import sys
+import subprocess
+
+# ── Bootstrap: auto-install missing PDF dependencies ─────────────────────────
+# This ensures reportlab/pypdf/Pillow are always available even if pip install
+# was never run during the Render build phase.
+_REQUIRED = [
+    ("reportlab", "reportlab>=4.2.0,<5.0"),
+    ("pypdf",     "pypdf>=4.0.0,<5.0"),
+    ("PIL",       "Pillow>=10.0.0,<12.0"),
+]
+
+def _ensure_deps():
+    missing = []
+    for mod, pkg in _REQUIRED:
+        try:
+            __import__(mod)
+        except ImportError:
+            missing.append(pkg)
+    if missing:
+        print(f"[run_pdf_gen] Installing missing packages: {missing}", file=sys.stderr)
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "--no-cache-dir"] + missing,
+            stdout=subprocess.DEVNULL,
+            stderr=sys.stderr,
+        )
+        print("[run_pdf_gen] Packages installed successfully.", file=sys.stderr)
+
+_ensure_deps()
+# ─────────────────────────────────────────────────────────────────────────────
+
 import json
 import argparse
 
 # Add the services directory to the path so we can import pdf_generator
 sys.path.insert(0, os.path.dirname(__file__))
 from pdf_generator import generate_quotation
+
 
 def main():
     parser = argparse.ArgumentParser()
