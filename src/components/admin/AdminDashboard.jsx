@@ -11,6 +11,7 @@ import {
     Briefcase
 } from 'lucide-react'
 import QuotationForm from './QuotationForm'
+import InvoiceForm from './InvoiceForm'
 
 const STATUS_CONFIG = {
     new: { label: 'New', color: 'bg-blue-100 text-blue-700' },
@@ -26,6 +27,7 @@ const TABS = [
     { id: 'gallery', label: 'Gallery', icon: Image },
     { id: 'directors', label: 'Directors', icon: Briefcase },
     { id: 'quotation', label: 'Quotation Generator', icon: Calculator },
+    { id: 'invoice', label: 'Tax Invoice Generator', icon: FileDown },
 ]
 
 export default function AdminDashboard() {
@@ -204,7 +206,7 @@ export default function AdminDashboard() {
                         >
                             <tab.icon className="w-4 h-4" />
                             {tab.label}
-                            {tab.id !== 'quotation' && (
+                            {(tab.id !== 'quotation' && tab.id !== 'invoice') && (
                                 <span className={`text-xs px-1.5 py-0.5 rounded-full ${
                                     activeTab === tab.id ? 'bg-white/20' : 'bg-gray-100'
                                 }`}>
@@ -222,6 +224,7 @@ export default function AdminDashboard() {
                 {activeTab === 'gallery' && <GalleryTab gallery={gallery} onEdit={(g) => setEditModal({ type: 'gallery', data: g, isNew: false })} onAdd={() => setEditModal({ type: 'gallery', data: { image_url: '', alt_text: '', label: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('gallery', id)} />}
                 {activeTab === 'directors' && <DirectorsTab directors={directors} onEdit={(d) => setEditModal({ type: 'directors', data: d, isNew: false })} onAdd={() => setEditModal({ type: 'directors', data: { name: '', role: '', description: '', image_url: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('directors', id)} />}
                 {activeTab === 'quotation' && <QuotationTab />}
+                {activeTab === 'invoice' && <InvoiceTab />}
             </main>
 
             {/* Edit Modal */}
@@ -241,6 +244,15 @@ function QuotationTab() {
     return (
         <div className="space-y-5">
             <QuotationForm />
+        </div>
+    )
+}
+
+// ========== INVOICE TAB ==========
+function InvoiceTab() {
+    return (
+        <div className="space-y-5">
+            <InvoiceForm />
         </div>
     )
 }

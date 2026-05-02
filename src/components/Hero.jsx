@@ -2,16 +2,16 @@ import { useEffect, useState } from 'react'
 import { ArrowRight, ChevronDown, Leaf, Shield, Award } from 'lucide-react'
 
 const stats = [
-    { value: '50+', label: 'Installations' },
-    { value: '200kW+', label: 'Capacity Installed' },
-    { value: '₹25L+', label: 'Customer Savings' },
-    { value: '100%', label: 'Satisfaction Rate' },
+    { value: '15+', label: 'Installations' },
+    { value: '100kW+', label: 'Capacity Installed' },
+    { value: '₹10L+', label: 'Customer Savings' },
+    { value: '94%', label: 'Satisfaction Rate' },
 ]
 
 const badges = [
-    { icon: Leaf, text: 'Carbon Neutral Tech' },
-    { icon: Shield, text: 'Govt. Certified' },
-    { icon: Award, text: 'Award Winning' },
+    { icon: Shield, text: 'Installed across WB' },
+    { icon: Award, text: 'Expert engineers' },
+    { icon: Leaf, text: 'End-to-end service' },
 ]
 
 export default function Hero() {
@@ -68,15 +68,31 @@ export default function Hero() {
 
                         {/* H1 */}
                         <h1 className="font-display font-black text-white leading-[1.05] mb-6">
-                            <span className="text-5xl sm:text-6xl lg:text-7xl block">Power Your</span>
-                            <span className="text-5xl sm:text-6xl lg:text-7xl block gradient-text">Future.</span>
+                            <span className="text-4xl sm:text-5xl lg:text-6xl block">Reduce Your</span>
+                            <span className="text-4xl sm:text-5xl lg:text-6xl block">Electricity Bill</span>
+                            <span className="text-4xl sm:text-5xl lg:text-6xl block gradient-text">to ZERO</span>
                         </h1>
 
-                        <p className="text-white/75 text-lg sm:text-xl leading-relaxed mb-8 max-w-xl">
-                            Clean, intelligent solar solutions for homes, businesses, and industries.
-                            Proudly serving from Singur, Hooghly, West Bengal — REON Energies makes
-                            solar affordable, efficient, and reliable.
+                        <p className="text-white/75 text-lg sm:text-xl leading-relaxed mb-6 max-w-xl">
+                            Affordable solar solutions for every home in West Bengal
                         </p>
+
+                        {/* Benefits Section */}
+                        <ul className="space-y-3 mb-8">
+                            {[
+                                'No upfront investment',
+                                'EMI less than electricity bill',
+                                'ROI in 2.5–3 years',
+                                '25+ years savings'
+                            ].map((text) => (
+                                <li key={text} className="flex items-center gap-3 text-white/90 text-lg">
+                                    <div className="w-5 h-5 rounded-full bg-emerald/20 flex items-center justify-center flex-shrink-0">
+                                        <span className="text-emerald text-sm">✔</span>
+                                    </div>
+                                    {text}
+                                </li>
+                            ))}
+                        </ul>
 
                         {/* Badges */}
                         <div className="flex flex-wrap gap-3 mb-10">
@@ -96,17 +112,17 @@ export default function Hero() {
                             <button
                                 onClick={() => scrollTo('#contact')}
                                 className="btn-primary text-base px-8 py-4 shadow-emerald hover:scale-105"
-                                aria-label="Get Free Solar Assessment"
+                                aria-label="Get Free Quote"
                             >
-                                Get Free Solar Assessment
+                                Get Free Quote
                                 <ArrowRight className="w-5 h-5" />
                             </button>
                             <button
                                 onClick={() => scrollTo('#services')}
                                 className="border-2 border-white/40 text-white font-semibold px-8 py-4 rounded-full hover:bg-white/10 active:scale-95 transition-all duration-200 inline-flex items-center gap-2 backdrop-blur-sm"
-                                aria-label="Explore Our Solutions"
+                                aria-label="Book Site Visit"
                             >
-                                Explore Our Solutions
+                                Book Site Visit
                                 <ChevronDown className="w-5 h-5" />
                             </button>
                         </div>
