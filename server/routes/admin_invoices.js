@@ -117,4 +117,16 @@ router.get('/', async (req, res) => {
   }
 });
 
+// DELETE /api/admin/invoices/:id
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query('DELETE FROM invoices WHERE id = $1', [id]);
+    res.json({ success: true, message: 'Invoice deleted successfully.' });
+  } catch (err) {
+    console.error('Delete invoice error:', err);
+    res.status(500).json({ error: 'Failed to delete invoice.' });
+  }
+});
+
 export default router;

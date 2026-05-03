@@ -135,7 +135,7 @@ function PriceCard({ label, value, accent }) {
 /* ════════════════════════════════════════════════════════════════════════════
    MAIN COMPONENT
 ═════════════════════════════════════════════════════════════════════════════ */
-export default function QuotationForm() {
+export default function QuotationForm({ editData, onClearEdit }) {
   const [step,       setStep]       = useState(0);
   const [form,       setForm]       = useState(INIT);
   const [loading,    setLoading]    = useState(false);
@@ -158,6 +158,20 @@ export default function QuotationForm() {
   const panelCount = kW > 0 ? Math.ceil((kW * 1000) / panelWatt) : 0;
 
   // ─── EMI simulation ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (editData) {
+      setForm({ ...INIT, ...editData });
+      setStep(0);
+      setSuccessUrl(null);
+      setError(null);
+    } else {
+      setForm(INIT);
+      setStep(0);
+      setSuccessUrl(null);
+      setError(null);
+    }
+  }, [editData]);
+
   useEffect(() => {
     if (form.payment_mode !== 'EMI / Loan') { setFinanceSim(null); return; }
 
@@ -619,12 +633,15 @@ export default function QuotationForm() {
         <div style={{ background: C.orange, borderRadius: 6, padding: '4px 12px', fontWeight: 700, color: 'white', fontSize: 14 }}>
           REON
         </div>
-        <div>
-          <div style={{ color: 'white', fontWeight: 700, fontSize: 15 }}>Dynamic Solar Quotation Builder</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ color: 'white', fontWeight: 700, fontSize: 15 }}>{editData ? 'Edit Solar Quotation' : 'Dynamic Solar Quotation Builder'}</div>
           <div style={{ color: '#AABBDD', fontSize: 11 }}>
             Auto-pricing engine · EMI calculator · PDF generator
           </div>
         </div>
+        {editData && (
+          <button onClick={onClearEdit} style={{ background: 'rgba(255,255,255,0.1)', color: 'white', border: '1px solid rgba(255,255,255,0.2)', padding: '6px 12px', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>Cancel Edit</button>
+        )}
       </div>
 
       {/* Progress */}

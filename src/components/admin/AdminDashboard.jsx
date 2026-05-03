@@ -8,7 +8,7 @@ import {
     ArrowUpRight, ArrowDownRight, Filter,
     LayoutGrid, MessageSquare, Image, FileText,
     Plus, X, Save, Edit2, Star, Calculator, ClipboardList, FileDown,
-    Briefcase
+    Briefcase, FolderOpen
 } from 'lucide-react'
 import QuotationForm from './QuotationForm'
 import InvoiceForm from './InvoiceForm'
@@ -28,6 +28,7 @@ const TABS = [
     { id: 'directors', label: 'Directors', icon: Briefcase },
     { id: 'quotation', label: 'Quotation Generator', icon: Calculator },
     { id: 'invoice', label: 'Tax Invoice Generator', icon: FileDown },
+    { id: 'documents', label: 'Generated Documents', icon: FolderOpen },
 ]
 
 export default function AdminDashboard() {
@@ -44,6 +45,9 @@ export default function AdminDashboard() {
     const [searchTerm, setSearchTerm] = useState('')
     const [expandedRow, setExpandedRow] = useState(null)
     const [editModal, setEditModal] = useState(null) // { type, data, isNew }
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+    const [editInvoiceData, setEditInvoiceData] = useState(null)
+    const [editQuotationData, setEditQuotationData] = useState(null)
 
     const token = localStorage.getItem('reon_admin_token')
     const adminUser = JSON.parse(localStorage.getItem('reon_admin_user') || '{}')
@@ -140,92 +144,134 @@ export default function AdminDashboard() {
     ]
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            {/* Header */}
-            <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
-                <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
+        <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
+            {/* Mobile Sidebar Overlay */}
+            {isSidebarOpen && (
+                <div 
+                    className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 lg:hidden"
+                    onClick={() => setIsSidebarOpen(false)}
+                />
+            )}
+
+            {/* Sidebar */}
+            <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 flex flex-col transition-transform duration-300 lg:relative lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+                {/* Sidebar Header */}
+                <div className="h-16 flex items-center justify-between px-5 border-b border-gray-100">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden border border-gray-100 shadow-sm p-1 bg-white">
+                        <div className="w-9 h-9 rounded-xl flex items-center justify-center overflow-hidden border border-gray-100 shadow-sm p-1 bg-white">
                             <img src="/admin-logo.jpg" alt="REON Logo" className="w-full h-full object-contain" />
                         </div>
                         <div>
-                            <h1 className="text-lg font-display font-bold text-navy leading-tight">REON Admin</h1>
-                            <p className="text-xs text-gray-400 -mt-0.5">Dashboard</p>
+                            <h1 className="text-base font-display font-bold text-navy leading-tight">REON Admin</h1>
+                            <p className="text-[10px] text-gray-400 font-medium tracking-wide uppercase">Dashboard</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                        <button onClick={fetchAll} className="p-2 text-gray-400 hover:text-emerald hover:bg-emerald/5 rounded-lg transition-colors" title="Refresh">
-                            <RefreshCw className="w-4.5 h-4.5" />
-                        </button>
-                        <div className="hidden sm:flex items-center gap-2 text-sm text-gray-500">
-                            <div className="w-7 h-7 bg-navy/8 rounded-lg flex items-center justify-center">
-                                <span className="text-xs font-bold text-navy">{adminUser.username?.[0]?.toUpperCase()}</span>
-                            </div>
-                            <span className="font-medium">{adminUser.username}</span>
-                        </div>
-                        <button onClick={handleLogout} className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-red-500 transition-colors px-3 py-1.5 hover:bg-red-50 rounded-lg">
-                            <LogOut className="w-4 h-4" />
-                            <span className="hidden sm:inline">Logout</span>
-                        </button>
-                    </div>
-                </div>
-            </header>
-
-            <main className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                {/* Stats Cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-                    {statCards.map((card) => (
-                        <div key={card.label} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-                            <div className="flex items-center justify-between mb-3">
-                                <div className={`w-10 h-10 ${card.iconBg} rounded-xl flex items-center justify-center`}>
-                                    <card.icon className={`w-5 h-5 ${card.iconColor}`} />
-                                </div>
-                                {card.isGrowth && (
-                                    <span className={`flex items-center gap-0.5 text-xs font-bold ${(stats?.growthPercentage || 0) >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                                        {(stats?.growthPercentage || 0) >= 0 ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
-                                    </span>
-                                )}
-                            </div>
-                            <p className="text-2xl font-bold text-navy">{card.value}</p>
-                            <p className="text-xs text-gray-400 font-medium mt-0.5">{card.label}</p>
-                        </div>
-                    ))}
+                    <button onClick={() => setIsSidebarOpen(false)} className="p-1.5 text-gray-400 hover:text-gray-600 lg:hidden">
+                        <X className="w-5 h-5" />
+                    </button>
                 </div>
 
-                {/* Tab Navigation */}
-                <div className="flex items-center gap-1 bg-white rounded-2xl p-1.5 border border-gray-100 shadow-sm mb-6 overflow-x-auto">
+                {/* Navigation */}
+                <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
                     {TABS.map(tab => (
                         <button
                             key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
+                            onClick={() => { setActiveTab(tab.id); setIsSidebarOpen(false); }}
+                            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                                 activeTab === tab.id
                                     ? 'bg-emerald text-white shadow-sm'
-                                    : 'text-gray-500 hover:text-navy hover:bg-gray-50'
+                                    : 'text-gray-600 hover:text-navy hover:bg-gray-50'
                             }`}
                         >
-                            <tab.icon className="w-4 h-4" />
-                            {tab.label}
-                            {(tab.id !== 'quotation' && tab.id !== 'invoice') && (
-                                <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                                    activeTab === tab.id ? 'bg-white/20' : 'bg-gray-100'
+                            <div className="flex items-center gap-3">
+                                <tab.icon className={`w-4.5 h-4.5 ${activeTab === tab.id ? 'text-white' : 'text-gray-400'}`} />
+                                {tab.label}
+                            </div>
+                            {(tab.id !== 'quotation' && tab.id !== 'invoice' && tab.id !== 'documents') && (
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                    activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
                                 }`}>
                                     {tab.id === 'enquiries' ? enquiries.length : tab.id === 'schemes' ? schemes.length : tab.id === 'testimonials' ? testimonials.length : tab.id === 'directors' ? directors.length : gallery.length}
                                 </span>
                             )}
                         </button>
                     ))}
-                </div>
+                </nav>
 
-                {/* Tab Content */}
-                {activeTab === 'enquiries' && <EnquiriesTab {...{ filtered, filter, setFilter, searchTerm, setSearchTerm, expandedRow, setExpandedRow, updateStatus, deleteEnquiry, formatDate, formatCurrency }} />}
-                {activeTab === 'schemes' && <SchemesTab schemes={schemes} onEdit={(s) => setEditModal({ type: 'schemes', data: s, isNew: false })} onAdd={() => setEditModal({ type: 'schemes', data: { icon: '☀️', badge: '', name: '', tagline: '', eligibility: [''], subsidy_breakdown: [{ label: '', value: '' }], reon_help: [''], total_subsidy: '', accent: 'from-emerald-700 to-emerald-600', featured: false, sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('schemes', id)} />}
-                {activeTab === 'testimonials' && <TestimonialsTab testimonials={testimonials} onEdit={(t) => setEditModal({ type: 'testimonials', data: t, isNew: false })} onAdd={() => setEditModal({ type: 'testimonials', data: { name: '', role: '', rating: 5, review: '', avatar_initials: '', avatar_color: 'bg-emerald', date_label: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('testimonials', id)} />}
-                {activeTab === 'gallery' && <GalleryTab gallery={gallery} onEdit={(g) => setEditModal({ type: 'gallery', data: g, isNew: false })} onAdd={() => setEditModal({ type: 'gallery', data: { image_url: '', alt_text: '', label: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('gallery', id)} />}
-                {activeTab === 'directors' && <DirectorsTab directors={directors} onEdit={(d) => setEditModal({ type: 'directors', data: d, isNew: false })} onAdd={() => setEditModal({ type: 'directors', data: { name: '', role: '', description: '', image_url: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('directors', id)} />}
-                {activeTab === 'quotation' && <QuotationTab />}
-                {activeTab === 'invoice' && <InvoiceTab />}
-            </main>
+                {/* User & Logout */}
+                <div className="p-4 border-t border-gray-100">
+                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl mb-3">
+                        <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 bg-white border border-gray-200 rounded-lg flex items-center justify-center shadow-sm">
+                                <span className="text-sm font-bold text-navy">{adminUser.username?.[0]?.toUpperCase()}</span>
+                            </div>
+                            <div className="truncate w-24">
+                                <p className="text-xs font-semibold text-navy truncate">{adminUser.username}</p>
+                                <p className="text-[10px] text-emerald font-medium">Administrator</p>
+                            </div>
+                        </div>
+                    </div>
+                    <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-red-600 hover:bg-red-50 py-2.5 rounded-xl transition-colors">
+                        <LogOut className="w-4 h-4" />
+                        Logout
+                    </button>
+                </div>
+            </aside>
+
+            {/* Main Content */}
+            <div className="flex-1 flex flex-col min-w-0 bg-gray-50/50">
+                {/* Header */}
+                <header className="bg-white border-b border-gray-100 sticky top-0 z-30 px-4 sm:px-6 h-16 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <button onClick={() => setIsSidebarOpen(true)} className="p-2 -ml-2 text-gray-500 hover:bg-gray-50 rounded-lg lg:hidden">
+                            <LayoutGrid className="w-5 h-5" />
+                        </button>
+                        <h2 className="text-lg font-display font-bold text-navy capitalize">
+                            {TABS.find(t => t.id === activeTab)?.label}
+                        </h2>
+                    </div>
+                    <button onClick={fetchAll} className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-500 hover:text-emerald hover:bg-emerald/5 rounded-lg transition-colors border border-gray-100 shadow-sm" title="Refresh Data">
+                        <RefreshCw className="w-4 h-4" />
+                        <span className="hidden sm:inline">Refresh</span>
+                    </button>
+                </header>
+
+                <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+                    {/* Stats Cards */}
+                    {activeTab === 'enquiries' && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+                            {statCards.map((card) => (
+                                <div key={card.label} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className={`w-10 h-10 ${card.iconBg} rounded-xl flex items-center justify-center`}>
+                                            <card.icon className={`w-5 h-5 ${card.iconColor}`} />
+                                        </div>
+                                        {card.isGrowth && (
+                                            <span className={`flex items-center gap-0.5 text-xs font-bold ${(stats?.growthPercentage || 0) >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                                {(stats?.growthPercentage || 0) >= 0 ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-2xl font-bold text-navy">{card.value}</p>
+                                    <p className="text-xs text-gray-400 font-medium mt-0.5">{card.label}</p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Tab Content */}
+                    <div className="max-w-6xl mx-auto">
+                        {activeTab === 'enquiries' && <EnquiriesTab {...{ filtered, filter, setFilter, searchTerm, setSearchTerm, expandedRow, setExpandedRow, updateStatus, deleteEnquiry, formatDate, formatCurrency }} />}
+                        {activeTab === 'schemes' && <SchemesTab schemes={schemes} onEdit={(s) => setEditModal({ type: 'schemes', data: s, isNew: false })} onAdd={() => setEditModal({ type: 'schemes', data: { icon: '☀️', badge: '', name: '', tagline: '', eligibility: [''], subsidy_breakdown: [{ label: '', value: '' }], reon_help: [''], total_subsidy: '', accent: 'from-emerald-700 to-emerald-600', featured: false, sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('schemes', id)} />}
+                        {activeTab === 'testimonials' && <TestimonialsTab testimonials={testimonials} onEdit={(t) => setEditModal({ type: 'testimonials', data: t, isNew: false })} onAdd={() => setEditModal({ type: 'testimonials', data: { name: '', role: '', rating: 5, review: '', avatar_initials: '', avatar_color: 'bg-emerald', date_label: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('testimonials', id)} />}
+                        {activeTab === 'gallery' && <GalleryTab gallery={gallery} onEdit={(g) => setEditModal({ type: 'gallery', data: g, isNew: false })} onAdd={() => setEditModal({ type: 'gallery', data: { image_url: '', alt_text: '', label: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('gallery', id)} />}
+                        {activeTab === 'directors' && <DirectorsTab directors={directors} onEdit={(d) => setEditModal({ type: 'directors', data: d, isNew: false })} onAdd={() => setEditModal({ type: 'directors', data: { name: '', role: '', description: '', image_url: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('directors', id)} />}
+                        {activeTab === 'quotation' && <QuotationTab editData={editQuotationData} onClearEdit={() => setEditQuotationData(null)} />}
+                        {activeTab === 'invoice' && <InvoiceTab editData={editInvoiceData} onClearEdit={() => setEditInvoiceData(null)} />}
+                        {activeTab === 'documents' && <GeneratedDocumentsTab onEditInvoice={(data) => { setEditInvoiceData(data); setActiveTab('invoice'); }} onEditQuotation={(data) => { setEditQuotationData(data); setActiveTab('quotation'); }} />}
+                    </div>
+                </main>
+            </div>
 
             {/* Edit Modal */}
             {editModal && (
@@ -240,19 +286,19 @@ export default function AdminDashboard() {
 }
 
 // ========== QUOTATION TAB ==========
-function QuotationTab() {
+function QuotationTab({ editData, onClearEdit }) {
     return (
         <div className="space-y-5">
-            <QuotationForm />
+            <QuotationForm editData={editData} onClearEdit={onClearEdit} />
         </div>
     )
 }
 
 // ========== INVOICE TAB ==========
-function InvoiceTab() {
+function InvoiceTab({ editData, onClearEdit }) {
     return (
         <div className="space-y-5">
-            <InvoiceForm />
+            <InvoiceForm editData={editData} onClearEdit={onClearEdit} />
         </div>
     )
 }
@@ -790,6 +836,217 @@ function EditModal({ modal, onClose, onSave }) {
                     </button>
                 </div>
             </div>
+        </div>
+    )
+}
+
+// ========== GENERATED DOCUMENTS TAB ==========
+function GeneratedDocumentsTab({ onEditInvoice, onEditQuotation }) {
+    const [documents, setDocuments] = useState([])
+    const [loading, setLoading] = useState(true)
+    const [otpModal, setOtpModal] = useState({ show: false, doc: null, loading: false, error: '' })
+    const [otpInput, setOtpInput] = useState('')
+
+    const token = localStorage.getItem('reon_admin_token')
+    const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
+
+    const fetchDocuments = async () => {
+        setLoading(true)
+        try {
+            const [quotesRes, invRes] = await Promise.all([
+                fetch(`${API}/api/admin/quotations`, { headers }),
+                fetch(`${API}/api/admin/invoices`, { headers })
+            ])
+            const quotes = await quotesRes.json()
+            const invoices = await invRes.json()
+
+            const formattedQuotes = (Array.isArray(quotes) ? quotes : []).map(q => {
+                let rawData = q;
+                if (q.raw_data) {
+                    try {
+                        rawData = typeof q.raw_data === 'string' ? JSON.parse(q.raw_data) : q.raw_data;
+                    } catch (e) {}
+                }
+                return {
+                    id: q.id,
+                    type: 'Quotation',
+                    customerName: q.customer_name || 'Unknown',
+                    refNo: q.offer_no,
+                    date: new Date(q.created_at),
+                    pdfUrl: q.pdf_url,
+                    raw: rawData,
+                    hasRaw: !!q.raw_data
+                };
+            })
+
+            const formattedInvoices = (Array.isArray(invoices) ? invoices : []).map(inv => {
+                let customerName = 'Unknown'
+                try {
+                    const details = typeof inv.customer_details === 'string' ? JSON.parse(inv.customer_details) : inv.customer_details
+                    if (details?.name) customerName = details.name
+                } catch (e) {}
+
+                return {
+                    id: inv.id,
+                    type: 'Invoice',
+                    customerName,
+                    refNo: inv.invoice_no,
+                    date: new Date(inv.created_at),
+                    pdfUrl: inv.pdf_url,
+                    raw: inv
+                }
+            })
+
+            const combined = [...formattedQuotes, ...formattedInvoices].sort((a, b) => b.date - a.date)
+            setDocuments(combined)
+        } catch (err) {
+            console.error("Failed to fetch documents", err)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    useEffect(() => {
+        fetchDocuments()
+    }, [])
+
+    const triggerDelete = async (doc) => {
+        setOtpModal({ show: true, doc, loading: true, error: '' })
+        try {
+            const res = await fetch(`${API}/api/auth/send-otp`, { method: 'POST', headers })
+            const data = await res.json()
+            if (!data.success) throw new Error(data.error || 'Failed to send OTP')
+            setOtpModal(p => ({ ...p, loading: false }))
+        } catch (err) {
+            setOtpModal(p => ({ ...p, loading: false, error: err.message }))
+        }
+    }
+
+    const confirmDelete = async () => {
+        if (otpInput.length !== 6) return setOtpModal(p => ({ ...p, error: 'Enter 6-digit OTP' }))
+        setOtpModal(p => ({ ...p, loading: true, error: '' }))
+        try {
+            // Verify OTP
+            const verifyRes = await fetch(`${API}/api/auth/verify-otp`, {
+                method: 'POST', headers, body: JSON.stringify({ otp: otpInput })
+            })
+            const verifyData = await verifyRes.json()
+            if (!verifyData.success) throw new Error(verifyData.error || 'Invalid OTP')
+
+            // Delete doc
+            const endpoint = otpModal.doc.type === 'Invoice' ? 'invoices' : 'quotations'
+            const delRes = await fetch(`${API}/api/admin/${endpoint}/${otpModal.doc.id}`, { method: 'DELETE', headers })
+            if (!delRes.ok) throw new Error('Failed to delete')
+
+            setOtpModal({ show: false, doc: null, loading: false, error: '' })
+            setOtpInput('')
+            fetchDocuments()
+        } catch (err) {
+            setOtpModal(p => ({ ...p, loading: false, error: err.message }))
+        }
+    }
+
+    if (loading && documents.length === 0) {
+        return (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 flex flex-col items-center justify-center mt-6">
+                <div className="w-8 h-8 border-3 border-emerald/30 border-t-emerald rounded-full animate-spin mb-3" />
+                <p className="text-gray-500 font-medium">Loading documents...</p>
+            </div>
+        )
+    }
+
+    const quotes = documents.filter(d => d.type === 'Quotation')
+    const invoices = documents.filter(d => d.type === 'Invoice')
+
+    const renderTable = (items, type) => (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex-1">
+            <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+                <h3 className="font-display font-bold text-navy">{type}s <span className="text-gray-400 text-sm font-normal ml-2">({items.length})</span></h3>
+            </div>
+            <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                    <thead>
+                        <tr className="border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400 font-semibold">
+                            <th className="text-left py-3 px-4">Details</th>
+                            <th className="text-right py-3 px-4">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {items.length === 0 ? (
+                            <tr><td colSpan="2" className="text-center py-8 text-gray-400 font-medium">No {type}s found.</td></tr>
+                        ) : items.map(doc => (
+                            <tr key={doc.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                                <td className="py-3 px-4">
+                                    <p className="font-semibold text-navy mb-0.5">{doc.customerName}_{doc.type}</p>
+                                    <p className="text-xs text-gray-500 flex gap-2">
+                                        <span>{doc.refNo}</span> • <span>{doc.date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                                    </p>
+                                </td>
+                                <td className="py-3 px-4 text-right">
+                                    <div className="flex items-center justify-end gap-2">
+                                        {doc.pdfUrl ? (
+                                            <a href={doc.pdfUrl.startsWith('/pdfs/') ? `${API}${doc.pdfUrl}` : doc.pdfUrl} target="_blank" rel="noopener noreferrer" className="p-1.5 text-emerald hover:bg-emerald/10 rounded-lg transition-colors" title="View PDF">
+                                                <FileDown className="w-4 h-4" />
+                                            </a>
+                                        ) : (
+                                            <span className="text-[10px] bg-red-50 text-red-500 px-2 py-1 rounded font-semibold mr-1" title="Render Ephemeral Disk Wiped Old PDFs">Missing</span>
+                                        )}
+                                        {type === 'Quotation' && doc.hasRaw && (
+                                            <button onClick={() => onEditQuotation(doc.raw)} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="Edit">
+                                                <Edit2 className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                        {type === 'Invoice' && (
+                                            <button onClick={() => onEditInvoice(doc.raw)} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors" title="Edit">
+                                                <Edit2 className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                        <button onClick={() => triggerDelete(doc)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    )
+
+    return (
+        <div className="mt-6">
+            <div className="flex flex-col lg:flex-row gap-6">
+                {renderTable(quotes, 'Quotation')}
+                {renderTable(invoices, 'Invoice')}
+            </div>
+
+            {/* OTP Modal */}
+            {otpModal.show && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] flex items-center justify-center px-4">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 animate-fade-in">
+                        <h3 className="text-lg font-bold text-navy mb-2">Delete Document</h3>
+                        <p className="text-sm text-gray-500 mb-4">An OTP has been sent to <b>support@reonenergy.in</b>. Please enter it below to confirm deletion of <b className="text-navy">{otpModal.doc?.refNo}</b>.</p>
+                        
+                        <input 
+                            type="text" 
+                            maxLength={6} 
+                            placeholder="Enter 6-digit OTP" 
+                            value={otpInput} 
+                            onChange={e => setOtpInput(e.target.value.replace(/\D/g, ''))}
+                            className="w-full text-center tracking-[0.5em] text-lg font-bold py-3 border border-gray-200 rounded-xl focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none mb-2"
+                        />
+                        {otpModal.error && <p className="text-xs text-red-500 font-medium text-center mb-4">{otpModal.error}</p>}
+                        
+                        <div className="flex gap-3 mt-6">
+                            <button onClick={() => { setOtpModal({ show: false }); setOtpInput(''); }} className="flex-1 py-2.5 text-sm font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors">Cancel</button>
+                            <button onClick={confirmDelete} disabled={otpModal.loading} className="flex-1 py-2.5 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-xl transition-colors disabled:opacity-70">
+                                {otpModal.loading ? 'Verifying...' : 'Delete'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

@@ -11,6 +11,7 @@ import dashboardRouter from './routes/dashboard.js';
 import contentRouter from './routes/content.js';
 import adminQuotationsRouter from './routes/admin_quotations.js';
 import adminInvoicesRouter from './routes/admin_invoices.js';
+import pdfsRouter from './routes/pdfs.js';
 import authMiddleware from './middleware/auth.js';
 
 dotenv.config();
@@ -78,8 +79,8 @@ app.use('/api/content', contentRouter);
 app.use('/api/admin/quotations', authMiddleware, adminQuotationsRouter);
 app.use('/api/admin/invoices', authMiddleware, adminInvoicesRouter);
 
-// Serve generated quotation PDFs as static files
-app.use('/pdfs', express.static(path.join(__dirname, 'pdfs')));
+// Serve generated PDFs with dynamic auto-regeneration if missing
+app.use('/pdfs', pdfsRouter);
 
 // Health check
 app.get('/api/health', (req, res) => {

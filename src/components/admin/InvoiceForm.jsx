@@ -23,8 +23,8 @@ const STEPS = [
 const INIT_COMPANY = {
   name: 'REON ENERGIES PRIVATE LIMITED',
   address: 'Address : Singherbheri, Singur, Hooghly, West Bengal, 712409\ncontact no : 8436649991',
-  gstin: 'YOUR_GSTIN_HERE', // User should fill this if needed or we can leave blank
-  pan: '',
+  gstin: '19AAPCR6346E2ZX',
+  pan: 'AAPCR6346E',
   email: 'info@reonenergy.in',
   phone: '+91 9876543210',
   bankName: 'Punjab National Bank',
@@ -127,7 +127,7 @@ function RRow({ label, value, bold }) {
   );
 }
 
-export default function InvoiceForm() {
+export default function InvoiceForm({ editData, onClearEdit }) {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -139,6 +139,26 @@ export default function InvoiceForm() {
   
   const [items, setItems] = useState([{ id: 1, name: '', description: '', hsn: '', quantity: 1, unit: 'Nos', rate: 0, tax: 18 }]);
   const [charges, setCharges] = useState({ loadingCharges: 0 });
+
+  useEffect(() => {
+    if (editData) {
+        try {
+            const parsedCompany = typeof editData.company_details === 'string' ? JSON.parse(editData.company_details) : editData.company_details;
+            const parsedCustomer = typeof editData.customer_details === 'string' ? JSON.parse(editData.customer_details) : editData.customer_details;
+            const parsedInvoice = typeof editData.invoice_details === 'string' ? JSON.parse(editData.invoice_details) : editData.invoice_details;
+            const parsedItems = typeof editData.items === 'string' ? JSON.parse(editData.items) : editData.items;
+
+            setCompanyDetails(parsedCompany || INIT_COMPANY);
+            setCustomerDetails(parsedCustomer || INIT_CUSTOMER);
+            setInvoiceDetails(parsedInvoice || { ...INIT_INVOICE_DETAILS, invoiceNo: `INV/26-27/001` });
+            setItems(parsedItems || [{ id: 1, name: '', description: '', hsn: '', quantity: 1, unit: 'Nos', rate: 0, tax: 18 }]);
+            setStep(0);
+            setSuccessUrl(null);
+        } catch(e) {
+            console.error('Error loading editData', e);
+        }
+    }
+  }, [editData]);
 
   const fmt = n => (isNaN(n) || n === 0) ? '0.00' : Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
   const fmtRs = n => `₹ ${fmt(n)}`;
@@ -251,8 +271,8 @@ export default function InvoiceForm() {
                 <Field label="Legal Name" name="name" value={companyDetails.name} readOnly />
                 <Field label="Address" name="address" value={companyDetails.address} readOnly />
                 <div style={{ display: 'flex', gap: 12 }}>
-                  <Field label="GSTIN" name="gstin" value={companyDetails.gstin} onChange={updateObj(setCompanyDetails)} half />
-                  <Field label="PAN" name="pan" value={companyDetails.pan} onChange={updateObj(setCompanyDetails)} half />
+                  <Field label="GSTIN" name="gstin" value={companyDetails.gstin} readOnly half />
+                  <Field label="PAN" name="pan" value={companyDetails.pan} readOnly half />
                 </div>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <Field label="A/C No" name="accountNumber" value={companyDetails.accountNumber} readOnly half />
@@ -344,10 +364,13 @@ export default function InvoiceForm() {
     <div style={{ fontFamily: 'system-ui, sans-serif', color: C.text, maxWidth: 820, margin: '0 auto' }}>
       <div style={{ background: C.navy, borderRadius: 10, padding: '14px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ background: C.orange, borderRadius: 6, padding: '4px 12px', fontWeight: 700, color: 'white', fontSize: 14 }}>REON</div>
-        <div>
-          <div style={{ color: 'white', fontWeight: 700, fontSize: 15 }}>Tax Invoice Generator</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ color: 'white', fontWeight: 700, fontSize: 15 }}>{editData ? 'Edit Tax Invoice' : 'Tax Invoice Generator'}</div>
           <div style={{ color: '#AABBDD', fontSize: 11 }}>Professional GST output · PDF watermarks · Multi-page</div>
         </div>
+        {editData && (
+          <button onClick={onClearEdit} style={{ background: 'rgba(255,255,255,0.1)', color: 'white', border: '1px solid rgba(255,255,255,0.2)', padding: '6px 12px', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>Cancel Edit</button>
+        )}
       </div>
       <ProgressBar />
       <div style={{ background: 'white', border: `1.5px solid ${C.border}`, borderRadius: 12, padding: '24px 28px', minHeight: 320 }}>

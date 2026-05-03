@@ -68,8 +68,7 @@ router.post('/', async (req, res) => {
     }
     console.log('[PDF] Python stdout:', stdout.trim());
 
-    // 2. Build a URL to download the PDF from our static /pdfs route
-    // Uses x-forwarded-proto/host so the URL is correct behind Nginx / Render
+    // 2. Build a URL to download the PDF
     const pdfUrl = `${getBaseUrl(req)}/pdfs/${pdfFileName}`;
 
     // 3. Save to Database
@@ -95,8 +94,8 @@ router.post('/', async (req, res) => {
       INSERT INTO quotations (
         offer_no, customer_name, total_price, payment_mode,
         down_payment, loan_amount, interest_rate, tenure,
-        emi_amount, total_interest, total_emi_paid, pdf_url
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        emi_amount, total_interest, total_emi_paid, pdf_url, raw_data
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
       RETURNING *;
     `;
     const values = [
@@ -112,6 +111,7 @@ router.post('/', async (req, res) => {
       total_interest,
       total_emi_paid,
       pdfUrl,
+      JSON.stringify(data)
     ];
 
     const result = await pool.query(query, values);
@@ -165,6 +165,18 @@ router.get('/', async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── DELETE /api/admin/quotations/:id ───────────────────────────────────────────
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query('DELETE FROM quotations WHERE id = $1', [id]);
+    res.json({ success: true, message: 'Quotation deleted successfully.' });
+  } catch (err) {
+    console.error('Delete quotation error:', err);
+    res.status(500).json({ error: 'Failed to delete quotation.' });
   }
 });
 
