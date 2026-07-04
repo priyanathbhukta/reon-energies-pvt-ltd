@@ -675,4 +675,36 @@ router.put('/admin/partners/:id', authenticate, requirePermission('partners.appr
   }
 });
 
+// ─── DELETE /api/pos/admin/partners/:id ─────────────────────
+router.delete('/admin/partners/:id', authenticate, requirePermission('partners.approve'), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    await client.query('BEGIN');
+
+    // Retrieve user_id from partner profile
+    const partnerRes = await client.query('SELECT user_id FROM pos_partners WHERE id = $1', [id]);
+    if (partnerRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'POS Partner not found' });
+    }
+    const userId = partnerRes.rows[0].user_id;
+
+    // Soft delete pos_partners
+    await client.query('UPDATE pos_partners SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1', [id]);
+
+    // Soft delete user
+    await client.query('UPDATE users SET deleted_at = NOW(), updated_at = NOW(), is_active = false WHERE id = $1', [userId]);
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'POS Partner deleted successfully' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Admin delete POS partner error:', err.message);
+    res.status(500).json({ error: 'Failed to delete POS partner' });
+  } finally {
+    client.release();
+  }
+});
+
 export default router;

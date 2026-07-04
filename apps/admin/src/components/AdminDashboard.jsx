@@ -57,6 +57,23 @@ export default function AdminDashboard() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
     const [editInvoiceData, setEditInvoiceData] = useState(null)
     const [editQuotationData, setEditQuotationData] = useState(null)
+    const [enqFromDate, setEnqFromDate] = useState('')
+    const [enqToDate, setEnqToDate] = useState('')
+    const [enqSearchHistory, setEnqSearchHistory] = useState(() => {
+        try {
+            const val = localStorage.getItem('reon_search_history_enquiries');
+            return val ? JSON.parse(val) : [];
+        } catch (_) { return []; }
+    });
+
+    const addToEnqHistory = (term) => {
+        if (!term.trim()) return;
+        setEnqSearchHistory(prev => {
+            const next = [term, ...prev.filter(t => t !== term)].slice(0, 5);
+            localStorage.setItem('reon_search_history_enquiries', JSON.stringify(next));
+            return next;
+        });
+    };
 
     const token = localStorage.getItem('reon_admin_token')
     const adminUser = JSON.parse(localStorage.getItem('reon_admin_user') || '{}')
@@ -147,6 +164,19 @@ export default function AdminDashboard() {
             e.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             e.phone.includes(searchTerm) ||
             (e.email && e.email.toLowerCase().includes(searchTerm.toLowerCase()))
+
+        // Date range filter
+        if (enqFromDate || enqToDate) {
+            const recordTime = new Date(e.created_at).getTime();
+            if (enqFromDate) {
+                const start = new Date(enqFromDate).setHours(0, 0, 0, 0);
+                if (recordTime < start) return false;
+            }
+            if (enqToDate) {
+                const end = new Date(enqToDate).setHours(23, 59, 59, 999);
+                if (recordTime > end) return false;
+            }
+        }
         return matchesFilter && matchesSearch
     })
 
@@ -290,7 +320,7 @@ export default function AdminDashboard() {
 
                     {/* Tab Content */}
                     <div className="max-w-6xl mx-auto">
-                        {activeTab === 'enquiries' && <EnquiriesTab {...{ filtered, filter, setFilter, searchTerm, setSearchTerm, expandedRow, setExpandedRow, updateStatus, deleteEnquiry, formatDate, formatCurrency }} />}
+                        {activeTab === 'enquiries' && <EnquiriesTab {...{ filtered, filter, setFilter, searchTerm, setSearchTerm, expandedRow, setExpandedRow, updateStatus, deleteEnquiry, formatDate, formatCurrency, enqFromDate, setEnqFromDate, enqToDate, setEnqToDate, enqSearchHistory, setEnqSearchHistory, addToEnqHistory }} />}
                         {activeTab === 'pos_partners' && <PosPartnersTab partners={posPartners} onRefresh={fetchAll} headers={headers} formatDate={formatDate} />}
                         {activeTab === 'leads' && <LeadsTab leads={leads} onRefresh={fetchAll} headers={headers} formatDate={formatDate} />}
                         {activeTab === 'projects' && <ProjectsTab />}
@@ -324,6 +354,24 @@ function PosPartnersTab({ partners, onRefresh, headers, formatDate }) {
     const [loadingDetails, setLoadingDetails] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editForm, setEditForm] = useState({});
+    const [searchTerm, setSearchTerm] = useState('');
+    const [fromDate, setFromDate] = useState('');
+    const [toDate, setToDate] = useState('');
+    const [searchHistory, setSearchHistory] = useState(() => {
+        try {
+            const val = localStorage.getItem('reon_search_history_partners');
+            return val ? JSON.parse(val) : [];
+        } catch (_) { return []; }
+    });
+
+    const addToHistory = (term) => {
+        if (!term.trim()) return;
+        setSearchHistory(prev => {
+            const next = [term, ...prev.filter(t => t !== term)].slice(0, 5);
+            localStorage.setItem('reon_search_history_partners', JSON.stringify(next));
+            return next;
+        });
+    };
 
     const handleAction = async (id, action) => {
         if (!window.confirm(`Are you sure you want to ${action} this partner?`)) return;
@@ -357,6 +405,45 @@ function PosPartnersTab({ partners, onRefresh, headers, formatDate }) {
             setSelectedPartnerId(null);
         } finally {
             setLoadingDetails(false);
+        }
+    };
+
+    const handleEditClick = async (p) => {
+        setSelectedPartnerId(p.id);
+        setLoadingDetails(true);
+        try {
+            const res = await fetch(`${API}/api/pos/partners/${p.id}/details`, { headers, cache: 'no-store' });
+            const data = await res.json();
+            if (data.success) {
+                setPartnerDetails(data.partner);
+                setEditForm(data.partner);
+                setIsEditing(true);
+            } else {
+                alert(data.error || 'Failed to load details');
+            }
+        } catch(err) {
+            alert('Error loading details');
+        } finally {
+            setLoadingDetails(false);
+        }
+    };
+
+    const handleDeleteClick = async (id) => {
+        if (!window.confirm('Are you sure you want to delete this POS partner? This will disable their account.')) return;
+        try {
+            const res = await fetch(`${API}/api/pos/admin/partners/${id}`, {
+                method: 'DELETE',
+                headers
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert('POS Partner deleted successfully');
+                onRefresh();
+            } else {
+                alert(data.error || 'Failed to delete partner');
+            }
+        } catch (err) {
+            alert('Error deleting partner');
         }
     };
 
@@ -397,12 +484,81 @@ function PosPartnersTab({ partners, onRefresh, headers, formatDate }) {
 
     const formatCurrency = (n) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n || 0);
 
+    const filteredPartners = partners.filter(p => {
+        if (searchTerm) {
+            const term = searchTerm.toLowerCase();
+            const matchesSearch = (p.fullName || '').toLowerCase().includes(term) ||
+                                 (p.shopName || '').toLowerCase().includes(term) ||
+                                 (p.mobile || '').includes(term) ||
+                                 (p.email || '').toLowerCase().includes(term);
+            if (!matchesSearch) return false;
+        }
+
+        if (fromDate || toDate) {
+            const recordTime = new Date(p.createdAt).getTime();
+            if (fromDate) {
+                const start = new Date(fromDate).setHours(0, 0, 0, 0);
+                if (recordTime < start) return false;
+            }
+            if (toDate) {
+                const end = new Date(toDate).setHours(23, 59, 59, 999);
+                if (recordTime > end) return false;
+            }
+        }
+        return true;
+    });
+
     return (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden relative">
-            <div className="p-5 border-b border-gray-100">
-                <h2 className="text-lg font-display font-bold text-navy">POS Partners</h2>
-                <p className="text-sm text-gray-400">Manage your Point of Sales partners ({partners.length})</p>
+            <div className="p-5 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h2 className="text-lg font-display font-bold text-navy">POS Partners</h2>
+                    <p className="text-sm text-gray-400">Manage your Point of Sales partners ({partners.length})</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Search partners..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onBlur={() => addToHistory(searchTerm)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') addToHistory(searchTerm); }}
+                            className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none w-48 transition-all"
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="date"
+                            value={fromDate}
+                            onChange={(e) => setFromDate(e.target.value)}
+                            className="border border-gray-200 rounded-xl p-1.5 text-xs text-gray-700 bg-white focus:outline-none focus:border-emerald-500"
+                        />
+                        <span className="text-gray-400 text-xs">to</span>
+                        <input
+                            type="date"
+                            value={toDate}
+                            onChange={(e) => setToDate(e.target.value)}
+                            className="border border-gray-200 rounded-xl p-1.5 text-xs text-gray-700 bg-white focus:outline-none focus:border-emerald-500"
+                        />
+                        {(fromDate || toDate) && (
+                            <button onClick={() => { setFromDate(''); setToDate(''); }} className="text-xs text-red-500 hover:underline">Reset</button>
+                        )}
+                    </div>
+                </div>
             </div>
+            {searchHistory.length > 0 && (
+                <div className="px-5 py-2 border-b border-gray-50 flex items-center gap-1.5 flex-wrap bg-gray-50/50">
+                    <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Recent Searches:</span>
+                    {searchHistory.map((h, i) => (
+                        <button key={i} onClick={() => setSearchTerm(h)} className="text-[10px] bg-white hover:bg-gray-100 text-gray-600 border border-gray-200 px-2 py-0.5 rounded-full font-medium">
+                            {h}
+                        </button>
+                    ))}
+                    <button onClick={() => { setSearchHistory([]); localStorage.removeItem('reon_search_history_partners'); }} className="text-[10px] text-red-500 hover:underline">Clear</button>
+                </div>
+            )}
             <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead>
@@ -416,9 +572,9 @@ function PosPartnersTab({ partners, onRefresh, headers, formatDate }) {
                         </tr>
                     </thead>
                     <tbody>
-                        {partners.length === 0 ? (
+                        {filteredPartners.length === 0 ? (
                             <tr><td colSpan="6" className="text-center py-12 text-gray-400">No POS Partners found</td></tr>
-                        ) : partners.map((p) => (
+                        ) : filteredPartners.map((p) => (
                             <tr key={p.id} className="border-b border-gray-50 hover:bg-gray-50/50">
                                 <td className="py-3.5 px-5">
                                     <p className="font-semibold text-navy">{p.fullName}</p>
@@ -445,8 +601,10 @@ function PosPartnersTab({ partners, onRefresh, headers, formatDate }) {
                                 <td className="py-3.5 px-3 text-gray-400 text-xs">
                                     {formatDate(p.createdAt)}
                                 </td>
-                                <td className="py-3.5 px-5 text-right space-x-2">
-                                    <button onClick={() => handleViewDetails(p.id)} className="text-xs font-semibold bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-100">View Details</button>
+                                <td className="py-3.5 px-5 text-right space-x-2 whitespace-nowrap">
+                                    <button onClick={() => handleViewDetails(p.id)} className="text-xs font-semibold bg-blue-50 text-blue-600 px-2.5 py-1.5 rounded-lg hover:bg-blue-100">View</button>
+                                    <button onClick={() => handleEditClick(p)} className="text-xs font-semibold bg-emerald-50 text-emerald-600 px-2.5 py-1.5 rounded-lg hover:bg-emerald-100">Edit</button>
+                                    <button onClick={() => handleDeleteClick(p.id)} className="text-xs font-semibold bg-red-50 text-red-600 px-2.5 py-1.5 rounded-lg hover:bg-red-100">Delete</button>
                                 </td>
                             </tr>
                         ))}
@@ -651,7 +809,7 @@ function InvoiceTab({ editData, onClearEdit }) {
 }
 
 // ========== ENQUIRIES TAB ==========
-function EnquiriesTab({ filtered, filter, setFilter, searchTerm, setSearchTerm, expandedRow, setExpandedRow, updateStatus, deleteEnquiry, formatDate, formatCurrency }) {
+function EnquiriesTab({ filtered, filter, setFilter, searchTerm, setSearchTerm, expandedRow, setExpandedRow, updateStatus, deleteEnquiry, formatDate, formatCurrency, enqFromDate, setEnqFromDate, enqToDate, setEnqToDate, enqSearchHistory, setEnqSearchHistory, addToEnqHistory }) {
     return (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="p-5 border-b border-gray-100">
@@ -660,11 +818,32 @@ function EnquiriesTab({ filtered, filter, setFilter, searchTerm, setSearchTerm, 
                         <h2 className="text-lg font-display font-bold text-navy">Customer Enquiries</h2>
                         <p className="text-sm text-gray-400">{filtered.length} found</p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                            <input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                            <input type="text" placeholder="Search..." value={searchTerm} 
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                onBlur={() => addToEnqHistory(searchTerm)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') addToEnqHistory(searchTerm); }}
                                 className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl focus:border-emerald focus:ring-2 focus:ring-emerald/20 focus:outline-none w-48 transition-all" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="date"
+                                value={enqFromDate}
+                                onChange={(e) => setEnqFromDate(e.target.value)}
+                                className="border border-gray-200 rounded-xl p-1.5 text-xs text-gray-700 bg-white focus:outline-none focus:border-emerald-500"
+                            />
+                            <span className="text-gray-400 text-xs">to</span>
+                            <input
+                                type="date"
+                                value={enqToDate}
+                                onChange={(e) => setEnqToDate(e.target.value)}
+                                className="border border-gray-200 rounded-xl p-1.5 text-xs text-gray-700 bg-white focus:outline-none focus:border-emerald-500"
+                            />
+                            {(enqFromDate || enqToDate) && (
+                                <button onClick={() => { setEnqFromDate(''); setEnqToDate(''); }} className="text-xs text-red-500 hover:underline">Reset</button>
+                            )}
                         </div>
                         <div className="relative">
                             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -679,6 +858,17 @@ function EnquiriesTab({ filtered, filter, setFilter, searchTerm, setSearchTerm, 
                         </div>
                     </div>
                 </div>
+                {enqSearchHistory?.length > 0 && (
+                    <div className="flex items-center gap-1.5 mt-3 flex-wrap border-t border-gray-50 pt-2">
+                        <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Recent Searches:</span>
+                        {enqSearchHistory.map((h, i) => (
+                            <button key={i} onClick={() => setSearchTerm(h)} className="text-[10px] bg-white hover:bg-gray-100 text-gray-600 border border-gray-200 px-2 py-0.5 rounded-full font-medium">
+                                {h}
+                            </button>
+                        ))}
+                        <button onClick={() => { setEnqSearchHistory([]); localStorage.removeItem('reon_search_history_enquiries'); }} className="text-[10px] text-red-500 hover:underline">Clear</button>
+                    </div>
+                )}
             </div>
             <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -1193,6 +1383,24 @@ function GeneratedDocumentsTab({ onEditInvoice, onEditQuotation }) {
     const [loading, setLoading] = useState(true)
     const [otpModal, setOtpModal] = useState({ show: false, doc: null, loading: false, error: '' })
     const [otpInput, setOtpInput] = useState('')
+    const [searchTerm, setSearchTerm] = useState('')
+    const [fromDate, setFromDate] = useState('')
+    const [toDate, setToDate] = useState('')
+    const [searchHistory, setSearchHistory] = useState(() => {
+        try {
+            const val = localStorage.getItem('reon_search_history_documents');
+            return val ? JSON.parse(val) : [];
+        } catch (_) { return []; }
+    });
+
+    const addToHistory = (term) => {
+        if (!term.trim()) return;
+        setSearchHistory(prev => {
+            const next = [term, ...prev.filter(t => t !== term)].slice(0, 5);
+            localStorage.setItem('reon_search_history_documents', JSON.stringify(next));
+            return next;
+        });
+    };
 
     const token = localStorage.getItem('reon_admin_token')
     const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
@@ -1302,8 +1510,29 @@ function GeneratedDocumentsTab({ onEditInvoice, onEditQuotation }) {
         )
     }
 
-    const quotes = documents.filter(d => d.type === 'Quotation')
-    const invoices = documents.filter(d => d.type === 'Invoice')
+    const filteredDocs = documents.filter(d => {
+        if (searchTerm) {
+            const term = searchTerm.toLowerCase();
+            const matchesSearch = (d.customerName || '').toLowerCase().includes(term) ||
+                                 (d.refNo || '').toLowerCase().includes(term);
+            if (!matchesSearch) return false;
+        }
+        if (fromDate || toDate) {
+            const recordTime = new Date(d.date).getTime();
+            if (fromDate) {
+                const start = new Date(fromDate).setHours(0, 0, 0, 0);
+                if (recordTime < start) return false;
+            }
+            if (toDate) {
+                const end = new Date(toDate).setHours(23, 59, 59, 999);
+                if (recordTime > end) return false;
+            }
+        }
+        return true;
+    });
+
+    const quotes = filteredDocs.filter(d => d.type === 'Quotation')
+    const invoices = filteredDocs.filter(d => d.type === 'Invoice')
 
     const renderTable = (items, type) => (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex-1">
@@ -1362,7 +1591,56 @@ function GeneratedDocumentsTab({ onEditInvoice, onEditQuotation }) {
     )
 
     return (
-        <div className="mt-6">
+        <div className="mt-6 space-y-4">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h2 className="text-lg font-display font-bold text-navy">Generated Documents</h2>
+                    <p className="text-sm text-gray-400">Search and manage quotations and invoices ({filteredDocs.length} total)</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Search documents..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onBlur={() => addToHistory(searchTerm)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') addToHistory(searchTerm); }}
+                            className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none w-48 transition-all"
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="date"
+                            value={fromDate}
+                            onChange={(e) => setFromDate(e.target.value)}
+                            className="border border-gray-200 rounded-xl p-1.5 text-xs text-gray-700 bg-white focus:outline-none focus:border-emerald-500"
+                        />
+                        <span className="text-gray-400 text-xs">to</span>
+                        <input
+                            type="date"
+                            value={toDate}
+                            onChange={(e) => setToDate(e.target.value)}
+                            className="border border-gray-200 rounded-xl p-1.5 text-xs text-gray-700 bg-white focus:outline-none focus:border-emerald-500"
+                        />
+                        {(fromDate || toDate) && (
+                            <button onClick={() => { setFromDate(''); setToDate(''); }} className="text-xs text-red-500 hover:underline">Reset</button>
+                        )}
+                    </div>
+                </div>
+            </div>
+            {searchHistory.length > 0 && (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-2 flex items-center gap-1.5 flex-wrap bg-gray-50/50">
+                    <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Recent Searches:</span>
+                    {searchHistory.map((h, i) => (
+                        <button key={i} onClick={() => setSearchTerm(h)} className="text-[10px] bg-white hover:bg-gray-100 text-gray-600 border border-gray-200 px-2 py-0.5 rounded-full font-medium">
+                            {h}
+                        </button>
+                    ))}
+                    <button onClick={() => { setSearchHistory([]); localStorage.removeItem('reon_search_history_documents'); }} className="text-[10px] text-red-500 hover:underline">Clear</button>
+                </div>
+            )}
             <div className="flex flex-col lg:flex-row gap-6">
                 {renderTable(quotes, 'Quotation')}
                 {renderTable(invoices, 'Invoice')}
@@ -1402,6 +1680,23 @@ function GeneratedDocumentsTab({ onEditInvoice, onEditQuotation }) {
 function LeadsTab({ leads, onRefresh, headers, formatDate }) {
     const [stageFilter, setStageFilter] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
+    const [fromDate, setFromDate] = useState('');
+    const [toDate, setToDate] = useState('');
+    const [searchHistory, setSearchHistory] = useState(() => {
+        try {
+            const val = localStorage.getItem('reon_search_history_leads');
+            return val ? JSON.parse(val) : [];
+        } catch (_) { return []; }
+    });
+
+    const addToHistory = (term) => {
+        if (!term.trim()) return;
+        setSearchHistory(prev => {
+            const next = [term, ...prev.filter(t => t !== term)].slice(0, 5);
+            localStorage.setItem('reon_search_history_leads', JSON.stringify(next));
+            return next;
+        });
+    };
 
     const STAGE_CONFIG = {
         new: { label: 'New', color: 'bg-blue-100 text-blue-700' },
@@ -1437,45 +1732,90 @@ function LeadsTab({ leads, onRefresh, headers, formatDate }) {
         if (stageFilter !== 'all' && l.stage !== stageFilter) return false;
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
-            return (l.customerName || '').toLowerCase().includes(term) ||
+            const matchesSearch = (l.customerName || '').toLowerCase().includes(term) ||
                    (l.mobile || '').includes(term) ||
                    (l.partnerShopName || '').toLowerCase().includes(term);
+            if (!matchesSearch) return false;
+        }
+        if (fromDate || toDate) {
+            const recordTime = new Date(l.createdAt).getTime();
+            if (fromDate) {
+                const start = new Date(fromDate).setHours(0, 0, 0, 0);
+                if (recordTime < start) return false;
+            }
+            if (toDate) {
+                const end = new Date(toDate).setHours(23, 59, 59, 999);
+                if (recordTime > end) return false;
+            }
         }
         return true;
     });
 
     return (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="p-5 border-b border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                <div>
-                    <h2 className="text-lg font-display font-bold text-navy">POS Leads</h2>
-                    <p className="text-sm text-gray-400">Leads submitted by POS partners ({leads.length} total)</p>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                        <input
-                            type="text"
-                            placeholder="Search leads..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-9 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500"
-                        />
+            <div className="p-5 border-b border-gray-100">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div>
+                        <h2 className="text-lg font-display font-bold text-navy">POS Leads</h2>
+                        <p className="text-sm text-gray-400">Leads submitted by POS partners ({leads.length} total)</p>
                     </div>
-                    <select
-                        value={stageFilter}
-                        onChange={(e) => setStageFilter(e.target.value)}
-                        className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-emerald-500"
-                    >
-                        <option value="all">All Stages</option>
-                        {Object.entries(STAGE_CONFIG).map(([key, val]) => (
-                            <option key={key} value={key}>{val.label}</option>
-                        ))}
-                    </select>
-                    <button onClick={onRefresh} className="text-xs font-semibold bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-lg hover:bg-emerald-100">
-                        <RefreshCw className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                            <input
+                                type="text"
+                                placeholder="Search leads..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                onBlur={() => addToHistory(searchTerm)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') addToHistory(searchTerm); }}
+                                className="pl-9 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500"
+                            />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="date"
+                                value={fromDate}
+                                onChange={(e) => setFromDate(e.target.value)}
+                                className="border border-gray-200 rounded-lg p-1.5 text-xs text-gray-700 bg-white focus:outline-none focus:border-emerald-500"
+                            />
+                            <span className="text-gray-400 text-xs">to</span>
+                            <input
+                                type="date"
+                                value={toDate}
+                                onChange={(e) => setToDate(e.target.value)}
+                                className="border border-gray-200 rounded-lg p-1.5 text-xs text-gray-700 bg-white focus:outline-none focus:border-emerald-500"
+                            />
+                            {(fromDate || toDate) && (
+                                <button onClick={() => { setFromDate(''); setToDate(''); }} className="text-xs text-red-500 hover:underline">Reset</button>
+                            )}
+                        </div>
+                        <select
+                            value={stageFilter}
+                            onChange={(e) => setStageFilter(e.target.value)}
+                            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-emerald-500"
+                        >
+                            <option value="all">All Stages</option>
+                            {Object.entries(STAGE_CONFIG).map(([key, val]) => (
+                                <option key={key} value={key}>{val.label}</option>
+                            ))}
+                        </select>
+                        <button onClick={onRefresh} className="text-xs font-semibold bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-lg hover:bg-emerald-100">
+                            <RefreshCw className="w-3.5 h-3.5" />
+                        </button>
+                    </div>
                 </div>
+                {searchHistory.length > 0 && (
+                    <div className="flex items-center gap-1.5 mt-3 flex-wrap border-t border-gray-50 pt-2">
+                        <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Recent Searches:</span>
+                        {searchHistory.map((h, i) => (
+                            <button key={i} onClick={() => setSearchTerm(h)} className="text-[10px] bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200 px-2 py-0.5 rounded-full font-medium">
+                                {h}
+                            </button>
+                        ))}
+                        <button onClick={() => { setSearchHistory([]); localStorage.removeItem('reon_search_history_leads'); }} className="text-[10px] text-red-500 hover:underline">Clear</button>
+                    </div>
+                )}
             </div>
             <div className="overflow-x-auto">
                 <table className="w-full text-sm">
