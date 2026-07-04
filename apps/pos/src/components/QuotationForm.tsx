@@ -578,7 +578,7 @@ export default function QuotationForm({ editData, onClearEdit }: QuotationFormPr
       )}
 
       {/* Navigation */}
-      <div style={{ display: 'flex', justifyContents: 'space-between', marginTop: 18, gap: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 18, gap: 10 }}>
         {successUrl ? (
           <>
             <button onClick={() => { setStep(0); setForm(INIT); setFinanceSim(null); setSuccessUrl(null); }}

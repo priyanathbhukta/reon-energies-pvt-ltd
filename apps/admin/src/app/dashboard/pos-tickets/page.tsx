@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAuthStore } from '@/store/auth-store';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { CheckCircle2, XCircle, Clock } from 'lucide-react';

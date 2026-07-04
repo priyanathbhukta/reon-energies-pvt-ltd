@@ -27,3 +27,8 @@ server/pdfs/
 server/temp/
 __pycache__/
 *.pdf
+.next
+.next/
+.vercel
+build/
+out/
