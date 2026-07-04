@@ -51,25 +51,59 @@ export async function authenticate(req, res, next) {
         [userId]
       );
       if (adminResult.rows.length > 0) {
-        userResult = {
-          rows: [{
-            id: adminResult.rows[0].id.toString(),
-            full_name: adminResult.rows[0].username,
-            email: 'admin@reonenergy.in',
-            mobile: '',
-            avatar_url: null,
-            is_active: true,
-            roles: ['super_admin'],
-            permissions: [
-              'users.create', 'users.read', 'users.update', 'users.delete',
-              'partners.create', 'partners.read', 'partners.update', 'partners.approve',
-              'leads.create', 'leads.read', 'leads.read_all', 'leads.update', 'leads.delete', 'leads.assign',
-              'commissions.read', 'commissions.manage', 'payouts.read', 'payouts.process',
-              'marketing.read', 'marketing.manage', 'analytics.read', 'analytics.read_all',
-              'admin.access', 'audit.read'
-            ]
-          }]
-        };
+        // Resolve or create a database-backed user row in the users table with role 'super_admin'
+        // so that they have a valid UUID to satisfy foreign key relationships like approved_by and user_id.
+        const adminEmail = `admin-${adminResult.rows[0].username.toLowerCase()}@reonenergy.in`;
+        
+        let localUserRes = await pool.query(
+          `SELECT u.id, u.full_name, u.email, u.mobile, u.avatar_url, u.is_active,
+                  array_agg(DISTINCT r.name) FILTER (WHERE r.name IS NOT NULL) as roles,
+                  array_agg(DISTINCT p.name) FILTER (WHERE p.name IS NOT NULL) as permissions
+           FROM users u
+           LEFT JOIN user_roles ur ON u.id = ur.user_id
+           LEFT JOIN roles r ON ur.role_id = r.id
+           LEFT JOIN role_permissions rp ON r.id = rp.role_id
+           LEFT JOIN permissions p ON rp.permission_id = p.id
+           WHERE u.email = $1 AND u.deleted_at IS NULL
+           GROUP BY u.id`,
+          [adminEmail]
+        );
+
+        if (localUserRes.rows.length === 0) {
+          // Insert the admin into users table
+          const insertRes = await pool.query(
+            `INSERT INTO users (full_name, email, mobile, password_hash, is_mobile_verified, is_active)
+             VALUES ($1, $2, '', '', true, true) RETURNING id`,
+            [adminResult.rows[0].username, adminEmail]
+          );
+          const newUserId = insertRes.rows[0].id;
+          
+          // Assign the super_admin role
+          const roleRes = await pool.query("SELECT id FROM roles WHERE name = 'super_admin'");
+          if (roleRes.rows.length > 0) {
+            await pool.query(
+              'INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)',
+              [newUserId, roleRes.rows[0].id]
+            );
+          }
+          
+          // Re-query to fetch complete permissions/roles
+          localUserRes = await pool.query(
+            `SELECT u.id, u.full_name, u.email, u.mobile, u.avatar_url, u.is_active,
+                    array_agg(DISTINCT r.name) FILTER (WHERE r.name IS NOT NULL) as roles,
+                    array_agg(DISTINCT p.name) FILTER (WHERE p.name IS NOT NULL) as permissions
+             FROM users u
+             LEFT JOIN user_roles ur ON u.id = ur.user_id
+             LEFT JOIN roles r ON ur.role_id = r.id
+             LEFT JOIN role_permissions rp ON r.id = rp.role_id
+             LEFT JOIN permissions p ON rp.permission_id = p.id
+             WHERE u.id = $1 AND u.deleted_at IS NULL
+             GROUP BY u.id`,
+            [newUserId]
+          );
+        }
+
+        userResult = localUserRes;
       }
     }
 
