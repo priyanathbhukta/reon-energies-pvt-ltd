@@ -1,0 +1,140 @@
+<!-- PAGE 3: SERVICES -->
+<style>
+.p3{background:#f8fafc}
+.services-header{background:linear-gradient(135deg,#0a1628 0%,#0d3b5e 100%);padding:30px 40px 24px;position:relative;overflow:hidden}
+.services-header::after{content:'';position:absolute;top:-40px;right:-40px;width:200px;height:200px;background:radial-gradient(circle,rgba(251,191,36,.15),transparent 70%);border-radius:50%}
+.services-header .sec-label{color:#86efac}
+.services-header .sec-title{color:#fff;font-size:24px}
+.services-header .sec-title span{color:#4ade80}
+.services-header p{color:rgba(255,255,255,.65);font-size:11.5px;margin-top:8px;max-width:500px;line-height:1.6}
+
+.services-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:20px 40px;flex:1}
+.svc-card{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 3px 15px rgba(0,0,0,.07);border:1px solid #e2e8f0;display:flex;flex-direction:column}
+.svc-card-top{height:110px;position:relative;overflow:hidden}
+.svc-card-top img{width:100%;height:100%;object-fit:cover;filter:brightness(.8)}
+.svc-card-top-overlay{position:absolute;inset:0;background:linear-gradient(135deg,rgba(10,22,40,.7),rgba(22,163,74,.3));display:flex;align-items:center;padding:14px 16px;gap:12px}
+.svc-icon-circle{width:40px;height:40px;background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.3);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;backdrop-filter:blur(4px)}
+.svc-card-title{font-family:'Outfit',sans-serif;font-size:14px;font-weight:700;color:#fff;line-height:1.2}
+.svc-card-body{padding:12px 16px 14px;flex:1}
+.svc-card-desc{font-size:10.5px;color:#4b5563;line-height:1.65}
+.svc-features{list-style:none;margin-top:8px;display:flex;flex-wrap:wrap;gap:4px}
+.svc-features li{font-size:9px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:20px;padding:2px 8px;font-weight:600}
+
+/* partner brands */
+.partners-section{background:linear-gradient(135deg,#0a1628,#0f2744);padding:20px 40px}
+.partners-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:14px}
+.partner-card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 8px;text-align:center;transition:all .3s}
+.partner-logo-placeholder{height:36px;display:flex;align-items:center;justify-content:center;margin-bottom:6px}
+.partner-name{font-size:9px;font-weight:700;color:rgba(255,255,255,.8);letter-spacing:.3px}
+.partner-type{font-size:8px;color:rgba(255,255,255,.4);margin-top:2px}
+
+.waaree-color{color:#f97316}
+.tata-color{color:#3b82f6}
+.utl-color{color:#a855f7}
+.loom-color{color:#10b981}
+.eastman-color{color:#ef4444}
+.adani-color{color:#06b6d4}
+</style>
+
+<div class="page p3" style="display:flex;flex-direction:column">
+  <div class="services-header">
+    <p class="sec-label">What We Do</p>
+    <h2 class="sec-title">Our <span>Services</span></h2>
+    <p>Comprehensive solar energy solutions from concept to commissioning — tailored for every sector.</p>
+  </div>
+
+  <div class="services-grid">
+    <div class="svc-card">
+      <div class="svc-card-top">
+        <img src="/brochure-images/img1.jpg" alt="Residential Solar"/>
+        <div class="svc-card-top-overlay">
+          <div class="svc-icon-circle">🏠</div>
+          <div class="svc-card-title">Residential Solar Solutions</div>
+        </div>
+      </div>
+      <div class="svc-card-body">
+        <p class="svc-card-desc">Reduce electricity bills and power your home with clean solar energy. Our residential systems are designed for maximum savings and 25+ year performance.</p>
+        <ul class="svc-features"><li>On-Grid</li><li>Off-Grid</li><li>Hybrid</li><li>Subsidy Support</li><li>Net Metering</li></ul>
+      </div>
+    </div>
+
+    <div class="svc-card">
+      <div class="svc-card-top">
+        <img src="/brochure-images/img3.jpg" alt="Commercial Solar"/>
+        <div class="svc-card-top-overlay">
+          <div class="svc-icon-circle">🏭</div>
+          <div class="svc-card-title">Commercial &amp; Industrial Solar Projects</div>
+        </div>
+      </div>
+      <div class="svc-card-body">
+        <p class="svc-card-desc">Smart energy solutions for factories, offices, warehouses, schools, hospitals, and commercial buildings. Significant cost reduction and energy independence.</p>
+        <ul class="svc-features"><li>Rooftop Solar</li><li>Ground Mount</li><li>Large Capacity</li><li>High ROI</li></ul>
+      </div>
+    </div>
+
+    <div class="svc-card">
+      <div class="svc-card-top">
+        <img src="/brochure-images/img5.jpg" alt="Solar EPC"/>
+        <div class="svc-card-top-overlay">
+          <div class="svc-icon-circle">⚙️</div>
+          <div class="svc-card-title">Solar EPC Services</div>
+        </div>
+      </div>
+      <div class="svc-card-body">
+        <p class="svc-card-desc">Complete project planning, design, engineering, procurement, installation, commissioning, and maintenance under one roof. Turnkey delivery.</p>
+        <ul class="svc-features"><li>Design</li><li>Procurement</li><li>Installation</li><li>Commissioning</li><li>AMC</li></ul>
+      </div>
+    </div>
+
+    <div class="svc-card">
+      <div class="svc-card-top">
+        <img src="/brochure-images/img4.jpg" alt="Battery Storage"/>
+        <div class="svc-card-top-overlay">
+          <div class="svc-icon-circle">🔋</div>
+          <div class="svc-card-title">Battery Backup &amp; Energy Storage</div>
+        </div>
+      </div>
+      <div class="svc-card-body">
+        <p class="svc-card-desc">Reliable backup systems ensuring uninterrupted power supply. Advanced lithium-ion and lead-acid battery storage solutions for home and industrial use.</p>
+        <ul class="svc-features"><li>Lithium-Ion</li><li>VRLA</li><li>Hybrid Ready</li><li>24/7 Power</li></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="partners-section">
+    <p class="sec-label" style="color:#86efac">Technology Partners</p>
+    <h3 style="font-family:'Outfit',sans-serif;font-size:16px;font-weight:800;color:#fff">Our <span style="color:#4ade80">Trusted Brand Partners</span></h3>
+    <div class="partners-grid">
+      <div class="partner-card">
+        <div class="partner-logo-placeholder"><span style="font-size:22px">⚡</span></div>
+        <div class="partner-name waaree-color">WAAREE</div>
+        <div class="partner-type">Solar Panels</div>
+      </div>
+      <div class="partner-card">
+        <div class="partner-logo-placeholder"><span style="font-size:22px">🔵</span></div>
+        <div class="partner-name tata-color">TATA POWER</div>
+        <div class="partner-type">Solar Modules</div>
+      </div>
+      <div class="partner-card">
+        <div class="partner-logo-placeholder"><span style="font-size:22px">🔆</span></div>
+        <div class="partner-name utl-color">UTL SOLAR</div>
+        <div class="partner-type">Inverters</div>
+      </div>
+      <div class="partner-card">
+        <div class="partner-logo-placeholder"><span style="font-size:22px">🌿</span></div>
+        <div class="partner-name loom-color">LOOM SOLAR</div>
+        <div class="partner-type">Panels &amp; Batteries</div>
+      </div>
+      <div class="partner-card">
+        <div class="partner-logo-placeholder"><span style="font-size:22px">🔴</span></div>
+        <div class="partner-name eastman-color">EASTMAN</div>
+        <div class="partner-type">Battery Storage</div>
+      </div>
+      <div class="partner-card">
+        <div class="partner-logo-placeholder"><span style="font-size:22px">🌊</span></div>
+        <div class="partner-name adani-color">ADANI SOLAR</div>
+        <div class="partner-type">PV Modules</div>
+      </div>
+    </div>
+  </div>
+</div>

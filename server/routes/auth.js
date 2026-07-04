@@ -64,6 +64,19 @@ router.get('/verify', (req, res) => {
 // POST /api/auth/send-otp
 router.post('/send-otp', async (req, res) => {
   try {
+    const { mobile } = req.body;
+    
+    if (mobile) {
+      // POS Login flow
+      const otp = '123456'; // Mocked for development
+      otpStore.set(mobile, {
+        otp,
+        expiresAt: new Date(Date.now() + 5 * 60000) // 5 minutes
+      });
+      console.log(`[DEV] Mock OTP for ${mobile}: ${otp}`);
+      return res.json({ success: true, message: 'OTP sent to mobile.' });
+    }
+
     const email = 'support@reonenergy.in';
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     
@@ -117,6 +130,70 @@ router.post('/verify-otp', (req, res) => {
     res.json({ success: true });
   } else {
     res.status(400).json({ error: 'Invalid OTP.' });
+  }
+});
+
+// POST /api/auth/verify-otp-login (POS Partner)
+router.post('/verify-otp-login', async (req, res) => {
+  try {
+    const { mobile, otp } = req.body;
+    if (!mobile || !otp) return res.status(400).json({ error: 'Mobile and OTP required.' });
+
+    const record = otpStore.get(mobile);
+    if (!record || new Date() > record.expiresAt || record.otp !== otp) {
+      return res.status(400).json({ error: 'Invalid or expired OTP.' });
+    }
+
+    otpStore.delete(mobile);
+
+    // Check if user exists
+    let userResult = await pool.query('SELECT * FROM users WHERE mobile = $1', [mobile]);
+    let user;
+    if (userResult.rows.length === 0) {
+      // Create new user
+      const insertUser = await pool.query(
+        'INSERT INTO users (full_name, mobile, is_active) VALUES ($1, $2, true) RETURNING *',
+        ['New Partner', mobile]
+      );
+      user = insertUser.rows[0];
+      
+      // Create basic pos_partners record
+      await pool.query(
+        'INSERT INTO pos_partners (user_id, shop_name, referral_code) VALUES ($1, $2, $3)',
+        [user.id, 'New Shop', 'REON' + Math.floor(Math.random()*10000)]
+      );
+    } else {
+      user = userResult.rows[0];
+    }
+
+    const partnerResult = await pool.query('SELECT * FROM pos_partners WHERE user_id = $1', [user.id]);
+    const partner = partnerResult.rows[0] || null;
+
+    const accessToken = jwt.sign({ id: user.id, mobile: user.mobile, type: 'pos' }, process.env.JWT_SECRET, { expiresIn: '24h' });
+    const refreshToken = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+    res.json({
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        fullName: user.full_name,
+        email: user.email,
+        mobile: user.mobile,
+        roles: ['pos_partner']
+      },
+      partner: partner ? {
+        id: partner.id,
+        shopName: partner.shop_name,
+        status: partner.status,
+        referralCode: partner.referral_code,
+        commissionTier: partner.commission_tier
+      } : null,
+      requiresMfa: false
+    });
+  } catch (err) {
+    console.error('Verify OTP error:', err);
+    res.status(500).json({ error: 'Verification failed.' });
   }
 });
 

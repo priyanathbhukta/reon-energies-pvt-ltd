@@ -1,0 +1,115 @@
+version: '3.9'
+
+services:
+  # ─── PostgreSQL Database ─────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: reon-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: reon_pos_db
+      POSTGRES_USER: reon_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-reon_secure_pass_2026}
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U reon_user -d reon_pos_db']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Redis Cache ─────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: reon-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── API Server ──────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: reon-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DATABASE_URL: postgresql://reon_user:${DB_PASSWORD:-reon_secure_pass_2026}@postgres:5432/reon_pos_db
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      REDIS_URL: redis://redis:6379
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      MSG91_AUTH_KEY: ${MSG91_AUTH_KEY}
+      MSG91_TEMPLATE_ID: ${MSG91_TEMPLATE_ID}
+    ports:
+      - '5000:5000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ─── POS Partner Portal ──────────────────────────────────
+  pos:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.pos
+    container_name: reon-pos
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:5000
+    ports:
+      - '3001:3001'
+    depends_on:
+      - api
+
+  # ─── Admin Dashboard ────────────────────────────────────
+  admin:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.admin
+    container_name: reon-admin
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:5000
+    ports:
+      - '3002:3002'
+    depends_on:
+      - api
+
+  # ─── NGINX Reverse Proxy ────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: reon-nginx
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api
+      - pos
+      - admin
+
+volumes:
+  postgres_data:
+  redis_data:

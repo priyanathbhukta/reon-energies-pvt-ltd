@@ -656,7 +656,7 @@ _DEFAULT_SCOPE = [
     "Detailed Solar Power Plant Design & Engineering.",
     "Supply of all equipment including packaging, forwarding, freight & transit insurance.",
     "Project Management for smooth execution within the agreed timeline.",
-    "On-site civil works, structural erection and equipment installation.",
+    "On-site structural erection and equipment installation.",
     "Electrical works, cable laying, interconnections, earthing & lightning protection.",
     "On-site commissioning and performance testing of the complete system.",
     "Operation & Maintenance training to customer personnel.",
@@ -669,7 +669,7 @@ _DEFAULT_NOTES = [
 ]
 _DEFAULT_EXECUTION = [
     "Preparation of detailed installation and construction documentation.",
-    "Civil works, structural erection and installation of all equipment.",
+    "Structural erection and installation of all equipment.",
     "Electrical interconnections, earthing & lightning protection system.",
     "Obtaining all required permits, consents and regulatory approvals.",
     "Commissioning, performance testing and handover with documentation.",
@@ -766,7 +766,7 @@ DEFAULT_QUOTATION_DATA: dict = {
     "power_factor":          "",
     # System
     "capacity":              "3.5 KWp",
-    "module_technology":     "Mono-Crystalline Bifacial N-Type Topcon Silicon Technology",
+    "module_technology":     "Bifacial N-Type Topcon Pure Silicon Technology Half-cut",
     "inverter_type":         "String Inverter (On-Grid)",
     "brands":                "UTL / ADANI / VIKRAM / LUMINOUS / SOLIS / TATA",
     "power_evacuation":      "230 VAC Single Phase",

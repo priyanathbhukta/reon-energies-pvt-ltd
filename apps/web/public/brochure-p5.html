@@ -1,0 +1,119 @@
+<!-- PAGE 5: GREEN MESSAGE + CONTACT -->
+<style>
+.p5{background:#fff;display:flex;flex-direction:column}
+.green-msg{background:linear-gradient(160deg,#052e16 0%,#065f46 50%,#0a3d1f 100%);padding:36px 40px;position:relative;overflow:hidden;flex:1}
+.green-msg-bg{position:absolute;inset:0;background:url('/brochure-images/img5.jpg') center/cover no-repeat;opacity:.12}
+.green-msg-circles{position:absolute;top:-80px;right:-80px;width:300px;height:300px;background:radial-gradient(circle,rgba(74,222,128,.15),transparent 70%);border-radius:50%}
+.green-msg-content{position:relative;z-index:2}
+.green-msg .sec-label{color:#86efac}
+.green-msg .sec-title{color:#fff;font-size:24px;margin-bottom:10px}
+.green-msg .sec-title span{color:#4ade80}
+.green-quote{font-size:14px;color:#d1fae5;font-style:italic;margin-bottom:24px;line-height:1.65;padding-left:16px;border-left:3px solid #4ade80}
+.green-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:28px}
+.green-item{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:16px 10px;text-align:center}
+.green-item-icon{font-size:24px;margin-bottom:8px}
+.green-item-title{font-size:9.5px;font-weight:700;color:#86efac;line-height:1.3;letter-spacing:.3px}
+
+.gallery-full{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:0 40px;margin-bottom:14px}
+.gf-item{border-radius:10px;overflow:hidden;position:relative;height:100px}
+.gf-item img{width:100%;height:100%;object-fit:cover;filter:brightness(.8)}
+.gf-overlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.65),transparent);display:flex;align-items:flex-end;padding:7px 10px}
+.gf-caption{font-size:8.5px;color:#fff;font-weight:600;letter-spacing:.3px}
+
+/* contact */
+.contact-section{background:linear-gradient(135deg,#0a1628 0%,#0d2d4e 100%);padding:24px 40px 20px}
+.contact-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:32px;margin-top:16px}
+.contact-left .company-name{font-family:'Outfit',sans-serif;font-size:22px;font-weight:900;color:#fff;margin-bottom:4px}
+.company-sub{font-size:10px;color:rgba(255,255,255,.5);letter-spacing:2px;text-transform:uppercase;margin-bottom:16px}
+.contact-line{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px}
+.contact-icon{width:30px;height:30px;background:rgba(22,163,74,.2);border:1px solid rgba(22,163,74,.3);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.contact-text p{font-size:10px;color:rgba(255,255,255,.5);margin-bottom:1px}
+.contact-text span{font-size:11.5px;color:#fff;font-weight:600}
+.contact-right{display:flex;flex-direction:column;justify-content:center;gap:12px}
+.cta-card{background:linear-gradient(135deg,#16a34a,#15803d);border-radius:12px;padding:16px;text-align:center}
+.cta-card h4{font-family:'Outfit',sans-serif;font-size:14px;font-weight:800;color:#fff;margin-bottom:4px}
+.cta-card p{font-size:10px;color:#d1fae5;line-height:1.5}
+.cta-phone{font-size:18px;font-weight:900;color:#fbbf24;margin-top:6px;font-family:'Outfit',sans-serif}
+
+.footer-bar{background:linear-gradient(90deg,#052e16,#15803d,#052e16);padding:12px 40px;display:flex;justify-content:space-between;align-items:center}
+.footer-bar p{font-size:10px;color:rgba(255,255,255,.7)}
+.footer-bar .quote{color:#d1fae5;font-style:italic;font-size:10.5px}
+</style>
+
+<div class="page p5">
+  <div class="green-msg">
+    <div class="green-msg-bg"></div>
+    <div class="green-msg-circles"></div>
+    <div class="green-msg-content">
+      <p class="sec-label">Our Green Commitment</p>
+      <h2 class="sec-title">Towards a <span>Cleaner &amp; Brighter</span> Future</h2>
+      <p class="green-quote">"Solar energy is not just an investment — it is a step toward environmental responsibility, energy independence, and a sustainable legacy for future generations."</p>
+      <div class="green-grid">
+        <div class="green-item"><div class="green-item-icon">💡</div><div class="green-item-title">Lower Electricity Bills</div></div>
+        <div class="green-item"><div class="green-item-icon">🌍</div><div class="green-item-title">Reduced Carbon Emissions</div></div>
+        <div class="green-item"><div class="green-item-icon">♻️</div><div class="green-item-title">Sustainable Development</div></div>
+        <div class="green-item"><div class="green-item-icon">🌿</div><div class="green-item-title">Green &amp; Clean Environment</div></div>
+        <div class="green-item"><div class="green-item-icon">⚡</div><div class="green-item-title">Energy Security for Future</div></div>
+      </div>
+      <p style="font-size:13px;color:#fbbf24;font-weight:700;font-style:italic;text-align:center">"Empowering India with Renewable Energy — Go Solar Today with REON Energies Pvt. Ltd."</p>
+    </div>
+  </div>
+
+  <div class="gallery-full">
+    <div class="gf-item">
+      <img src="/brochure-images/img1.jpg" alt="Rooftop Solar"/>
+      <div class="gf-overlay"><span class="gf-caption">Industrial Rooftop Installation</span></div>
+    </div>
+    <div class="gf-item">
+      <img src="/brochure-images/img2.jpg" alt="Factory Solar"/>
+      <div class="gf-overlay"><span class="gf-caption">Large Factory Solar Setup</span></div>
+    </div>
+    <div class="gf-item">
+      <img src="/brochure-images/img4.jpg" alt="Inverter Setup"/>
+      <div class="gf-overlay"><span class="gf-caption">Solar Inverter Installation</span></div>
+    </div>
+  </div>
+
+  <div class="contact-section">
+    <p class="sec-label" style="color:#86efac">Get In Touch</p>
+    <h3 style="font-family:'Outfit',sans-serif;font-size:20px;font-weight:800;color:#fff">Contact <span style="color:#4ade80">REON Energies</span></h3>
+    <div class="contact-grid">
+      <div class="contact-left">
+        <div class="company-name">REON ENERGIES</div>
+        <div class="company-sub">Private Limited — Solar EPC Company</div>
+        <div class="contact-line">
+          <div class="contact-icon">📍</div>
+          <div class="contact-text"><p>Address</p><span>Sinherbheri, Singur, Hooghly, West Bengal – 712409</span></div>
+        </div>
+        <div class="contact-line">
+          <div class="contact-icon">📞</div>
+          <div class="contact-text"><p>Phone</p><span>+91 8436649991</span></div>
+        </div>
+        <div class="contact-line">
+          <div class="contact-icon">📧</div>
+          <div class="contact-text"><p>Email</p><span>reonenergiespvtltd@gmail.com</span></div>
+        </div>
+        <div class="contact-line">
+          <div class="contact-icon">🌐</div>
+          <div class="contact-text"><p>Website</p><span>reonenergy.in</span></div>
+        </div>
+      </div>
+      <div class="contact-right">
+        <div class="cta-card">
+          <h4>Get a Free Site Assessment</h4>
+          <p>Our solar experts will visit your site, assess your requirements, and provide a customized proposal at no cost.</p>
+          <div class="cta-phone">+91 8436649991</div>
+        </div>
+        <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:12px;text-align:center">
+          <p style="font-size:9px;color:rgba(255,255,255,.5);margin-bottom:4px">VISIT OUR WEBSITE</p>
+          <p style="font-size:14px;font-weight:800;color:#4ade80;font-family:'Outfit',sans-serif">reonenergy.in</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-bar">
+    <p>© 2025 REON Energies Private Limited. All Rights Reserved.</p>
+    <p class="quote">"Go Solar Today with REON Energies Pvt. Ltd."</p>
+  </div>
+</div>

@@ -12,7 +12,13 @@ import contentRouter from './routes/content.js';
 import adminQuotationsRouter from './routes/admin_quotations.js';
 import adminInvoicesRouter from './routes/admin_invoices.js';
 import pdfsRouter from './routes/pdfs.js';
+import projectsRouter from './routes/projects.js';
+import posRouter from './src/controllers/posController.js';
+import posDocumentsRouter from './src/routes/pos_documents.js';
+import posAuthRouter from './src/controllers/authController.js';
+import leadRouter from './src/controllers/leadController.js';
 import authMiddleware from './middleware/auth.js';
+import { authenticate } from './src/middlewares/auth.js';
 
 dotenv.config();
 
@@ -52,8 +58,13 @@ ensurePythonDeps();
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:4173",
+  "http://localhost:3001",
+  "http://localhost:3002",
   "https://reonenergy.in",
   "https://www.reonenergy.in",
+  "https://admin.reonenergy.in",
+  "https://pos.reonenergy.in",
+  "https://api.reonenergy.in",
 ];
 
 app.use(cors({
@@ -73,11 +84,17 @@ app.use(express.json());
 
 // Routes
 app.use('/api/enquiries', enquiriesRouter);
-app.use('/api/auth', authRouter);
+app.use('/api/auth', authRouter);         // Legacy admin auth (username/password)
+app.use('/api/auth', posAuthRouter);       // POS partner auth (pos-login, pos-change-password)
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/content', contentRouter);
 app.use('/api/admin/quotations', authMiddleware, adminQuotationsRouter);
+app.use('/api/quotations', authenticate, adminQuotationsRouter);
 app.use('/api/admin/invoices', authMiddleware, adminInvoicesRouter);
+app.use('/api/projects', authMiddleware, projectsRouter);
+app.use('/api/pos', posRouter);
+app.use('/api/pos/documents', posDocumentsRouter);
+app.use('/api/leads', leadRouter);
 
 // Serve generated PDFs with dynamic auto-regeneration if missing
 app.use('/pdfs', pdfsRouter);
@@ -92,5 +109,7 @@ app.listen(PORT, () => {
   console.log(`\n🚀 REON Energy API server running on http://localhost:${PORT}`);
   console.log(`📊 Dashboard API: http://localhost:${PORT}/api/dashboard/stats`);
   console.log(`📝 Enquiries API: http://localhost:${PORT}/api/enquiries`);
-  console.log(`🔐 Auth API: http://localhost:${PORT}/api/auth/login\n`);
+  console.log(`🔐 Admin Login:   http://localhost:${PORT}/api/auth/login`);
+  console.log(`🔑 POS Login:     http://localhost:${PORT}/api/auth/pos-login`);
+  console.log(`👤 POS Register:  http://localhost:${PORT}/api/pos/register\n`);
 });

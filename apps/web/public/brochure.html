@@ -1,0 +1,635 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>REON Energies Pvt Ltd â€“ Corporate Brochure</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#fff;color:#1a1a2e;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+h1,h2,h3,h4,h5{font-family:'Outfit',sans-serif}
+
+/* PAGE SETUP */
+.page{width:210mm;min-height:297mm;position:relative;overflow:hidden;background:#fff;page-break-after:always}
+.page:last-child{page-break-after:auto}
+
+@media print{
+  body{margin:0}
+  .page{page-break-after:always;margin:0}
+  @page{size:A4;margin:0}
+  .no-print{display:none!important}
+}
+
+/* PRINT BUTTON */
+.print-btn{position:fixed;bottom:30px;right:30px;z-index:9999;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;padding:14px 28px;border-radius:50px;font-family:'Outfit',sans-serif;font-weight:700;font-size:15px;cursor:pointer;box-shadow:0 8px 25px rgba(22,163,74,0.4);display:flex;align-items:center;gap:8px;transition:all .3s}
+.print-btn:hover{transform:translateY(-2px);box-shadow:0 12px 35px rgba(22,163,74,0.5)}
+
+/* ============================
+   PAGE 1 â€“ COVER
+   ============================ */
+.cover{background:linear-gradient(160deg,#0a1628 0%,#0d2d4e 40%,#0a3d1f 100%);min-height:297mm;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.cover-bg-image{position:absolute;inset:0;background:url('/brochure-images/img1.jpg') center/cover no-repeat;opacity:.18}
+.cover-grid-lines{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px);background-size:40px 40px}
+.cover-sun{position:absolute;top:-80px;right:-80px;width:360px;height:360px;background:radial-gradient(circle,rgba(253,186,5,.25) 0%,rgba(253,186,5,.08) 40%,transparent 70%);border-radius:50%}
+.cover-sun-2{position:absolute;bottom:-60px;left:-60px;width:280px;height:280px;background:radial-gradient(circle,rgba(22,163,74,.2) 0%,rgba(22,163,74,.06) 40%,transparent 70%);border-radius:50%}
+.cover-content{position:relative;z-index:2;display:flex;flex-direction:column;height:100%;padding:0}
+
+/* TOP BAR */
+.cover-topbar{background:rgba(22,163,74,.15);border-bottom:2px solid rgba(22,163,74,.4);padding:18px 40px;display:flex;justify-content:space-between;align-items:center}
+.cover-logo-area{display:flex;align-items:center;gap:14px}
+.cover-logo-icon{width:52px;height:52px;background:linear-gradient(135deg,#16a34a,#fbbf24);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px}
+.cover-logo-text h1{font-size:20px;font-weight:800;color:#fff;letter-spacing:.5px;line-height:1.1}
+.cover-logo-text p{font-size:9px;color:rgba(255,255,255,.6);letter-spacing:2px;text-transform:uppercase}
+.cover-cert{display:flex;gap:16px}
+.cert-badge{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:6px 12px;text-align:center}
+.cert-badge p{font-size:8px;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:1px}
+.cert-badge span{font-size:11px;font-weight:700;color:#fbbf24}
+
+/* HERO AREA */
+.cover-hero{flex:1;display:flex;flex-direction:column;justify-content:center;padding:40px 40px 20px}
+.cover-tag{display:inline-flex;align-items:center;gap:8px;background:rgba(22,163,74,.2);border:1px solid rgba(22,163,74,.4);border-radius:30px;padding:7px 18px;margin-bottom:24px;width:fit-content}
+.cover-tag span{width:8px;height:8px;background:#16a34a;border-radius:50%;animation:pulse 2s infinite}
+.cover-tag p{font-size:11px;color:#86efac;font-weight:600;letter-spacing:1.5px;text-transform:uppercase}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+.cover-headline{font-size:48px;font-weight:900;color:#fff;line-height:1.05;margin-bottom:16px}
+.cover-headline .green{color:#4ade80}
+.cover-headline .yellow{color:#fbbf24}
+.cover-tagline{font-size:15px;color:rgba(255,255,255,.65);margin-bottom:30px;line-height:1.6;max-width:420px}
+.cover-divider-row{display:flex;align-items:center;gap:16px;margin-bottom:30px}
+.cover-divider-line{flex:1;height:1px;background:linear-gradient(90deg,rgba(22,163,74,.6),transparent)}
+.cover-divider-text{font-size:10px;color:#4ade80;letter-spacing:2px;text-transform:uppercase;white-space:nowrap;font-weight:600}
+.cover-pills{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:36px}
+.cover-pill{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:20px;padding:7px 16px;font-size:11px;color:rgba(255,255,255,.8);font-weight:500}
+.cover-pill.green-pill{background:rgba(22,163,74,.15);border-color:rgba(22,163,74,.4);color:#86efac}
+
+/* COVER PHOTO STRIP */
+.cover-photo-strip{height:200px;display:grid;grid-template-columns:2fr 1fr 1fr;gap:3px;margin:0}
+.strip-photo{overflow:hidden;position:relative}
+.strip-photo img{width:100%;height:100%;object-fit:cover;filter:brightness(.85)}
+.strip-overlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.6),transparent);display:flex;align-items:flex-end;padding:10px 12px}
+.strip-caption{font-size:9px;color:#fff;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+
+/* COVER BOTTOM BAR */
+.cover-bottom{background:linear-gradient(90deg,#15803d,#16a34a,#15803d);padding:16px 40px;display:flex;justify-content:space-between;align-items:center}
+.cover-bottom p{font-size:11px;color:#fff;font-weight:600;letter-spacing:.5px}
+.cover-bottom-quote{font-size:12px;color:#d1fae5;font-style:italic}
+</style>
+</head>
+<body>
+
+<button class="print-btn no-print" onclick="window.print()">
+  ðŸ–¨ï¸ Save as PDF
+</button>
+
+<!-- ============================================================
+     PAGE 1 â€“ FRONT COVER
+     ============================================================ -->
+<div class="page cover">
+  <div class="cover-bg-image"></div>
+  <div class="cover-grid-lines"></div>
+  <div class="cover-sun"></div>
+  <div class="cover-sun-2"></div>
+  <div class="cover-content">
+
+    <div class="cover-topbar">
+      <div class="cover-logo-area">
+        <div class="cover-logo-icon">â˜€ï¸</div>
+        <div class="cover-logo-text">
+          <h1>REON ENERGIES</h1>
+          <p>Private Limited &nbsp;|&nbsp; Solar EPC Company</p>
+        </div>
+      </div>
+      <div class="cover-cert">
+        <div class="cert-badge"><p>Est.</p><span>2022</span></div>
+        <div class="cert-badge"><p>Projects</p><span>15+</span></div>
+        <div class="cert-badge"><p>Capacity</p><span>3MW+</span></div>
+      </div>
+    </div>
+
+    <div class="cover-hero">
+      <div class="cover-tag">
+        <span></span>
+        <p>Corporate Profile &amp; Company Brochure 2025</p>
+      </div>
+
+      <h2 class="cover-headline">
+        Powering a<br>
+        <span class="green">Greener</span><br>
+        <span class="yellow">Tomorrow</span>
+      </h2>
+      <p class="cover-tagline">REON Energies Private Limited â€” Trusted Solar EPC Partner for Residential, Commercial &amp; Industrial Projects across West Bengal &amp; India.</p>
+
+      <div class="cover-divider-row">
+        <div class="cover-divider-line"></div>
+        <div class="cover-divider-text">Clean Energy â€¢ Smart Future â€¢ Sustainable Growth</div>
+        <div class="cover-divider-line"></div>
+      </div>
+
+      <div class="cover-pills">
+        <span class="cover-pill green-pill">ðŸ”† Solar EPC Services</span>
+        <span class="cover-pill green-pill">ðŸ­ Industrial Projects</span>
+        <span class="cover-pill">ðŸ  Residential Solar</span>
+        <span class="cover-pill">ðŸ”‹ Battery Storage</span>
+        <span class="cover-pill">ðŸ’§ Solar Water Pumps</span>
+        <span class="cover-pill">âš¡ Net Metering</span>
+      </div>
+
+      <p style="font-size:18px;font-style:italic;color:#fbbf24;font-weight:700;letter-spacing:.5px">"Save Electricity. Save Nature. Choose Solar."</p>
+    </div>
+
+    <div class="cover-photo-strip">
+      <div class="strip-photo">
+        <img src="/brochure-images/img1.jpg" alt="Industrial rooftop solar"/>
+        <div class="strip-overlay"><span class="strip-caption">Large-Scale Industrial Rooftop Solar</span></div>
+      </div>
+      <div class="strip-photo">
+        <img src="/brochure-images/img3.jpg" alt="Solar installation"/>
+        <div class="strip-overlay"><span class="strip-caption">Factory Installation</span></div>
+      </div>
+      <div class="strip-photo">
+        <img src="/brochure-images/img4.jpg" alt="Inverter setup"/>
+        <div class="strip-overlay"><span class="strip-caption">Inverter Setup</span></div>
+      </div>
+    </div>
+
+    <div class="cover-bottom">
+      <p>ðŸ“ Sinherbheri, Singur, Hooghly, West Bengal â€“ 712409</p>
+      <p class="cover-bottom-quote">reonenergy.in &nbsp;|&nbsp; +91 8436649991</p>
+    </div>
+
+  </div>
+</div>
+
+<!-- PAGE 2: ABOUT + MISSION + VISION + WHY CHOOSE -->
+<style>
+.p2{background:#fff;display:flex;flex-direction:column}
+.section-header{padding:28px 40px 0}
+.sec-label{font-size:9px;color:#16a34a;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;margin-bottom:6px}
+.sec-title{font-family:'Outfit',sans-serif;font-size:26px;font-weight:800;color:#0a1628;line-height:1.2}
+.sec-title span{color:#16a34a}
+.divider{width:50px;height:3px;background:linear-gradient(90deg,#16a34a,#fbbf24);border-radius:2px;margin:10px 0 18px}
+
+/* about grid */
+.about-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;flex:1}
+.about-left{background:linear-gradient(160deg,#0a1628,#0d3b5e);padding:36px 36px 36px 40px;display:flex;flex-direction:column;justify-content:center}
+.about-left .sec-label{color:#86efac}
+.about-left .sec-title{color:#fff;font-size:22px}
+.about-left .sec-title span{color:#4ade80}
+.about-body{font-size:11.5px;color:rgba(255,255,255,.78);line-height:1.75;margin-bottom:18px}
+.about-list{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.about-list li{font-size:10.5px;color:#d1fae5;display:flex;align-items:center;gap:6px;font-weight:500}
+.about-list li::before{content:'âœ¦';color:#fbbf24;font-size:9px;flex-shrink:0}
+.about-right{padding:28px 32px 28px 28px;display:flex;flex-direction:column;gap:18px}
+
+/* mission / vision cards */
+.mv-card{border-radius:12px;padding:18px 20px;position:relative;overflow:hidden}
+.mv-card.mission{background:linear-gradient(135deg,#ecfdf5,#d1fae5);border-left:4px solid #16a34a}
+.mv-card.vision{background:linear-gradient(135deg,#eff6ff,#dbeafe);border-left:4px solid #1d4ed8}
+.mv-icon{font-size:24px;margin-bottom:8px}
+.mv-label{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px}
+.mission .mv-label{color:#15803d}
+.vision .mv-label{color:#1d4ed8}
+.mv-text{font-size:11px;color:#374151;line-height:1.65}
+
+/* why choose */
+.why-section{background:linear-gradient(135deg,#f0fdf4,#ecfdf5);border-top:2px solid #bbf7d0;padding:20px 40px}
+.why-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-top:12px}
+.why-item{background:#fff;border-radius:10px;padding:10px 6px;text-align:center;border:1px solid #d1fae5;box-shadow:0 2px 8px rgba(22,163,74,.08)}
+.why-icon{font-size:18px;margin-bottom:4px}
+.why-text{font-size:8.5px;color:#166534;font-weight:600;line-height:1.3}
+
+/* stat row */
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);background:linear-gradient(90deg,#15803d,#16a34a);gap:0}
+.stat-item{padding:14px 10px;text-align:center;border-right:1px solid rgba(255,255,255,.15)}
+.stat-item:last-child{border-right:none}
+.stat-num{font-family:'Outfit',sans-serif;font-size:22px;font-weight:900;color:#fff}
+.stat-label{font-size:8.5px;color:#d1fae5;margin-top:2px;font-weight:500}
+</style>
+
+<div class="page p2">
+  <div class="about-grid">
+    <div class="about-left">
+      <p class="sec-label">Who We Are</p>
+      <h2 class="sec-title">About <span>REON Energies</span></h2>
+      <div class="divider"></div>
+      <p class="about-body">REON Energies Private Limited is a trusted solar energy solutions provider and EPC company delivering reliable, affordable, and sustainable solar energy solutions for homes, businesses, industries, and institutions across India.</p>
+      <p class="about-body" style="margin-bottom:14px">We specialize in complete solar project execution â€” from design and procurement to installation and commissioning â€” with a focus on quality, transparency, and long-term customer satisfaction.</p>
+      <p style="font-size:9.5px;color:#86efac;font-weight:600;margin-bottom:10px;letter-spacing:1px;text-transform:uppercase">Our Core Specializations:</p>
+      <ul class="about-list">
+        <li>Solar Panels</li><li>Solar Inverters</li>
+        <li>Battery Storage Systems</li><li>ACDB &amp; DCDB</li>
+        <li>Combiner Boxes</li><li>Solar Installation</li>
+        <li>On-Grid Systems</li><li>Off-Grid Systems</li>
+        <li>Hybrid Systems</li><li>Residential Projects</li>
+        <li>Commercial Projects</li><li>Industrial Projects</li>
+      </ul>
+    </div>
+    <div class="about-right">
+      <div class="mv-card mission">
+        <div class="mv-icon">ðŸŽ¯</div>
+        <div class="mv-label">Our Mission</div>
+        <p class="mv-text">To make renewable energy <strong>affordable, accessible, and reliable</strong> for every home and business while contributing towards a sustainable and carbon-free future for India.</p>
+      </div>
+      <div class="mv-card vision">
+        <div class="mv-icon">ðŸ”­</div>
+        <div class="mv-label">Our Vision</div>
+        <p class="mv-text">To become one of India's most <strong>trusted green energy companies</strong> by delivering innovative solar solutions with quality, transparency, and unmatched customer satisfaction.</p>
+      </div>
+      <div style="background:linear-gradient(135deg,#fff7ed,#fef3c7);border-left:4px solid #fbbf24;border-radius:12px;padding:18px 20px">
+        <div style="font-size:24px;margin-bottom:8px">âš¡</div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#d97706;margin-bottom:6px">Our Commitment</div>
+        <p style="font-size:11px;color:#374151;line-height:1.65">We aim to build a <strong>cleaner and greener future</strong> through advanced renewable energy technology, professional service, and end-to-end EPC execution that delivers real, measurable value.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="why-section">
+    <p class="sec-label">Why REON?</p>
+    <h3 style="font-family:'Outfit',sans-serif;font-size:16px;font-weight:800;color:#0a1628">Why Choose <span style="color:#16a34a">REON Energies?</span></h3>
+    <div class="why-grid">
+      <div class="why-item"><div class="why-icon">ðŸ†</div><div class="why-text">High Quality Products</div></div>
+      <div class="why-item"><div class="why-icon">ðŸ‘·</div><div class="why-text">Expert Install Team</div></div>
+      <div class="why-item"><div class="why-icon">ðŸ¤</div><div class="why-text">Trusted Brands</div></div>
+      <div class="why-item"><div class="why-icon">ðŸ’°</div><div class="why-text">Affordable Solutions</div></div>
+      <div class="why-item"><div class="why-icon">ðŸ­</div><div class="why-text">All Project Types</div></div>
+      <div class="why-item"><div class="why-icon">ðŸ”§</div><div class="why-text">End-to-End EPC</div></div>
+      <div class="why-item"><div class="why-icon">ðŸ“ž</div><div class="why-text">After Sales Support</div></div>
+    </div>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat-item"><div class="stat-num">3 MW+</div><div class="stat-label">Capacity Installed</div></div>
+    <div class="stat-item"><div class="stat-num">15+</div><div class="stat-label">Major Projects</div></div>
+    <div class="stat-item"><div class="stat-num">6+</div><div class="stat-label">Partner Brands</div></div>
+    <div class="stat-item"><div class="stat-num">100%</div><div class="stat-label">Client Satisfaction</div></div>
+  </div>
+</div>
+<!-- PAGE 3: SERVICES -->
+<style>
+.p3{background:#f8fafc}
+.services-header{background:linear-gradient(135deg,#0a1628 0%,#0d3b5e 100%);padding:30px 40px 24px;position:relative;overflow:hidden}
+.services-header::after{content:'';position:absolute;top:-40px;right:-40px;width:200px;height:200px;background:radial-gradient(circle,rgba(251,191,36,.15),transparent 70%);border-radius:50%}
+.services-header .sec-label{color:#86efac}
+.services-header .sec-title{color:#fff;font-size:24px}
+.services-header .sec-title span{color:#4ade80}
+.services-header p{color:rgba(255,255,255,.65);font-size:11.5px;margin-top:8px;max-width:500px;line-height:1.6}
+
+.services-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:20px 40px;flex:1}
+.svc-card{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 3px 15px rgba(0,0,0,.07);border:1px solid #e2e8f0;display:flex;flex-direction:column}
+.svc-card-top{height:110px;position:relative;overflow:hidden}
+.svc-card-top img{width:100%;height:100%;object-fit:cover;filter:brightness(.8)}
+.svc-card-top-overlay{position:absolute;inset:0;background:linear-gradient(135deg,rgba(10,22,40,.7),rgba(22,163,74,.3));display:flex;align-items:center;padding:14px 16px;gap:12px}
+.svc-icon-circle{width:40px;height:40px;background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.3);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;backdrop-filter:blur(4px)}
+.svc-card-title{font-family:'Outfit',sans-serif;font-size:14px;font-weight:700;color:#fff;line-height:1.2}
+.svc-card-body{padding:12px 16px 14px;flex:1}
+.svc-card-desc{font-size:10.5px;color:#4b5563;line-height:1.65}
+.svc-features{list-style:none;margin-top:8px;display:flex;flex-wrap:wrap;gap:4px}
+.svc-features li{font-size:9px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:20px;padding:2px 8px;font-weight:600}
+
+/* partner brands */
+.partners-section{background:linear-gradient(135deg,#0a1628,#0f2744);padding:20px 40px}
+.partners-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:14px}
+.partner-card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 8px;text-align:center;transition:all .3s}
+.partner-logo-placeholder{height:36px;display:flex;align-items:center;justify-content:center;margin-bottom:6px}
+.partner-name{font-size:9px;font-weight:700;color:rgba(255,255,255,.8);letter-spacing:.3px}
+.partner-type{font-size:8px;color:rgba(255,255,255,.4);margin-top:2px}
+
+.waaree-color{color:#f97316}
+.tata-color{color:#3b82f6}
+.utl-color{color:#a855f7}
+.loom-color{color:#10b981}
+.eastman-color{color:#ef4444}
+.adani-color{color:#06b6d4}
+</style>
+
+<div class="page p3" style="display:flex;flex-direction:column">
+  <div class="services-header">
+    <p class="sec-label">What We Do</p>
+    <h2 class="sec-title">Our <span>Services</span></h2>
+    <p>Comprehensive solar energy solutions from concept to commissioning â€” tailored for every sector.</p>
+  </div>
+
+  <div class="services-grid">
+    <div class="svc-card">
+      <div class="svc-card-top">
+        <img src="/brochure-images/img1.jpg" alt="Residential Solar"/>
+        <div class="svc-card-top-overlay">
+          <div class="svc-icon-circle">ðŸ </div>
+          <div class="svc-card-title">Residential Solar Solutions</div>
+        </div>
+      </div>
+      <div class="svc-card-body">
+        <p class="svc-card-desc">Reduce electricity bills and power your home with clean solar energy. Our residential systems are designed for maximum savings and 25+ year performance.</p>
+        <ul class="svc-features"><li>On-Grid</li><li>Off-Grid</li><li>Hybrid</li><li>Subsidy Support</li><li>Net Metering</li></ul>
+      </div>
+    </div>
+
+    <div class="svc-card">
+      <div class="svc-card-top">
+        <img src="/brochure-images/img3.jpg" alt="Commercial Solar"/>
+        <div class="svc-card-top-overlay">
+          <div class="svc-icon-circle">ðŸ­</div>
+          <div class="svc-card-title">Commercial &amp; Industrial Solar Projects</div>
+        </div>
+      </div>
+      <div class="svc-card-body">
+        <p class="svc-card-desc">Smart energy solutions for factories, offices, warehouses, schools, hospitals, and commercial buildings. Significant cost reduction and energy independence.</p>
+        <ul class="svc-features"><li>Rooftop Solar</li><li>Ground Mount</li><li>Large Capacity</li><li>High ROI</li></ul>
+      </div>
+    </div>
+
+    <div class="svc-card">
+      <div class="svc-card-top">
+        <img src="/brochure-images/img5.jpg" alt="Solar EPC"/>
+        <div class="svc-card-top-overlay">
+          <div class="svc-icon-circle">âš™ï¸</div>
+          <div class="svc-card-title">Solar EPC Services</div>
+        </div>
+      </div>
+      <div class="svc-card-body">
+        <p class="svc-card-desc">Complete project planning, design, engineering, procurement, installation, commissioning, and maintenance under one roof. Turnkey delivery.</p>
+        <ul class="svc-features"><li>Design</li><li>Procurement</li><li>Installation</li><li>Commissioning</li><li>AMC</li></ul>
+      </div>
+    </div>
+
+    <div class="svc-card">
+      <div class="svc-card-top">
+        <img src="/brochure-images/img4.jpg" alt="Battery Storage"/>
+        <div class="svc-card-top-overlay">
+          <div class="svc-icon-circle">ðŸ”‹</div>
+          <div class="svc-card-title">Battery Backup &amp; Energy Storage</div>
+        </div>
+      </div>
+      <div class="svc-card-body">
+        <p class="svc-card-desc">Reliable backup systems ensuring uninterrupted power supply. Advanced lithium-ion and lead-acid battery storage solutions for home and industrial use.</p>
+        <ul class="svc-features"><li>Lithium-Ion</li><li>VRLA</li><li>Hybrid Ready</li><li>24/7 Power</li></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="partners-section">
+    <p class="sec-label" style="color:#86efac">Technology Partners</p>
+    <h3 style="font-family:'Outfit',sans-serif;font-size:16px;font-weight:800;color:#fff">Our <span style="color:#4ade80">Trusted Brand Partners</span></h3>
+    <div class="partners-grid">
+      <div class="partner-card">
+        <div class="partner-logo-placeholder"><span style="font-size:22px">âš¡</span></div>
+        <div class="partner-name waaree-color">WAAREE</div>
+        <div class="partner-type">Solar Panels</div>
+      </div>
+      <div class="partner-card">
+        <div class="partner-logo-placeholder"><span style="font-size:22px">ðŸ”µ</span></div>
+        <div class="partner-name tata-color">TATA POWER</div>
+        <div class="partner-type">Solar Modules</div>
+      </div>
+      <div class="partner-card">
+        <div class="partner-logo-placeholder"><span style="font-size:22px">ðŸ”†</span></div>
+        <div class="partner-name utl-color">UTL SOLAR</div>
+        <div class="partner-type">Inverters</div>
+      </div>
+      <div class="partner-card">
+        <div class="partner-logo-placeholder"><span style="font-size:22px">ðŸŒ¿</span></div>
+        <div class="partner-name loom-color">LOOM SOLAR</div>
+        <div class="partner-type">Panels &amp; Batteries</div>
+      </div>
+      <div class="partner-card">
+        <div class="partner-logo-placeholder"><span style="font-size:22px">ðŸ”´</span></div>
+        <div class="partner-name eastman-color">EASTMAN</div>
+        <div class="partner-type">Battery Storage</div>
+      </div>
+      <div class="partner-card">
+        <div class="partner-logo-placeholder"><span style="font-size:22px">ðŸŒŠ</span></div>
+        <div class="partner-name adani-color">ADANI SOLAR</div>
+        <div class="partner-type">PV Modules</div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- PAGE 4: MAJOR CLIENTS TABLE + GALLERY -->
+<style>
+.p4{background:#fff;display:flex;flex-direction:column}
+.clients-header{background:linear-gradient(90deg,#15803d,#16a34a);padding:22px 40px}
+.clients-header .sec-label{color:#d1fae5}
+.clients-header .sec-title{color:#fff;font-size:22px}
+.clients-header .sec-title span{color:#fbbf24}
+
+.clients-table-wrap{padding:16px 40px 10px;flex:1}
+.clients-intro{font-size:11px;color:#4b5563;margin-bottom:14px;line-height:1.6}
+.clients-intro strong{color:#15803d}
+
+table.projects-table{width:100%;border-collapse:collapse;font-size:10px}
+.projects-table thead tr{background:linear-gradient(90deg,#0a1628,#0d3b5e)}
+.projects-table thead th{padding:10px 10px;text-align:left;color:#fff;font-weight:600;font-size:9.5px;letter-spacing:.5px;text-transform:uppercase}
+.projects-table thead th:last-child{text-align:center}
+.projects-table tbody tr{border-bottom:1px solid #f1f5f9}
+.projects-table tbody tr:nth-child(even){background:#f8fafc}
+.projects-table tbody tr:nth-child(odd){background:#fff}
+.projects-table tbody tr:hover{background:#f0fdf4}
+.projects-table td{padding:8px 10px;vertical-align:middle;color:#374151}
+.projects-table td:first-child{font-weight:600;color:#0a1628;width:30px;text-align:center}
+.projects-table td.client-name{font-weight:600;color:#1e3a5f}
+.projects-table td.capacity{text-align:center}
+.kw-badge{display:inline-block;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;font-size:9px;font-weight:700;padding:3px 10px;border-radius:20px}
+.kw-badge.large{background:linear-gradient(135deg,#d97706,#b45309)}
+.kw-badge.medium{background:linear-gradient(135deg,#0369a1,#075985)}
+
+/* gallery */
+.gallery-section{padding:12px 40px 0}
+.gallery-grid{display:grid;grid-template-columns:2fr 1fr 1fr;grid-template-rows:110px 110px;gap:6px;margin-top:10px}
+.g-item{border-radius:10px;overflow:hidden;position:relative}
+.g-item.tall{grid-row:span 2}
+.g-item img{width:100%;height:100%;object-fit:cover}
+.g-caption{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(0,0,0,.75),transparent);padding:6px 10px}
+.g-caption span{font-size:8.5px;color:#fff;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+</style>
+
+<div class="page p4">
+  <div class="clients-header">
+    <p class="sec-label">Our Track Record</p>
+    <h2 class="sec-title">Major Clients of <span>Reon Energies Pvt Ltd</span></h2>
+  </div>
+
+  <div class="clients-table-wrap">
+    <p class="clients-intro">We have successfully executed solar EPC projects for leading hospitals, educational institutions, industries, and commercial establishments across <strong>West Bengal</strong>. Our portfolio demonstrates large-scale execution capability and technical excellence.</p>
+
+    <table class="projects-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Client / Organization</th>
+          <th>Location</th>
+          <th>Capacity</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td class="client-name">Ramakrishna Mission Shilpapitha</td><td>Belgharia, Kolkata</td><td class="capacity"><span class="kw-badge medium">52 kW</span></td></tr>
+        <tr><td>2</td><td class="client-name">Ecos Housing Project</td><td>New Town, Kolkata</td><td class="capacity"><span class="kw-badge">26 kW</span></td></tr>
+        <tr><td>3</td><td class="client-name">Metalist Consultant Pvt. Ltd.</td><td>New Town, Kolkata</td><td class="capacity"><span class="kw-badge">8 kW</span></td></tr>
+        <tr><td>4</td><td class="client-name">Electro Steel Castings Limited</td><td>Khardha, Kolkata</td><td class="capacity"><span class="kw-badge medium">35 kW</span></td></tr>
+        <tr><td>5</td><td class="client-name">Bankura Medical College &amp; Hospital</td><td>Bankura, WB</td><td class="capacity"><span class="kw-badge">10 kW</span></td></tr>
+        <tr><td>6</td><td class="client-name">Times of India Building</td><td>Salt Lake Sector-5, Kolkata</td><td class="capacity"><span class="kw-badge medium">40 kW</span></td></tr>
+        <tr><td>7</td><td class="client-name">Agrico Industries</td><td>Howrah, WB</td><td class="capacity"><span class="kw-badge medium">40 kW</span></td></tr>
+        <tr><td>8</td><td class="client-name">Mali Agri Tech Pvt. Ltd.</td><td>Ranaghat, Nadia</td><td class="capacity"><span class="kw-badge large">80 kW</span></td></tr>
+        <tr><td>9</td><td class="client-name">Nicco Park</td><td>Salt Lake-5 / New Town</td><td class="capacity"><span class="kw-badge large">125 kW</span></td></tr>
+        <tr><td>10</td><td class="client-name">M/s Allen Laboratories Limited</td><td>Kolkata</td><td class="capacity"><span class="kw-badge large">160 kW</span></td></tr>
+        <tr><td>11</td><td class="client-name">G. K. Plastics Pvt. Ltd.</td><td>Bandel, Hooghly</td><td class="capacity"><span class="kw-badge large">160 kW</span></td></tr>
+        <tr><td>12</td><td class="client-name">Apollo Gleneagles Hospitals</td><td>EM Bypass, Kolkata</td><td class="capacity"><span class="kw-badge large" style="background:linear-gradient(135deg,#7c3aed,#6d28d9)">325 kW</span></td></tr>
+        <tr><td>13</td><td class="client-name">Oscar Equipments Pvt. Ltd.</td><td>Bishnupur, Bankura</td><td class="capacity"><span class="kw-badge large" style="background:linear-gradient(135deg,#7c3aed,#6d28d9)">500 kW</span></td></tr>
+        <tr><td>14</td><td class="client-name">Kamala Industries</td><td>Sangur, WB</td><td class="capacity"><span class="kw-badge large" style="background:linear-gradient(135deg,#dc2626,#b91c1c)">700 kW</span></td></tr>
+        <tr><td>15</td><td class="client-name">Century Ply Boards India Ltd.</td><td>West Bengal</td><td class="capacity"><span class="kw-badge large" style="background:linear-gradient(135deg,#d97706,#92400e);font-size:10px;padding:4px 12px">1500 kW</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="gallery-section">
+    <p style="font-size:9px;color:#16a34a;font-weight:700;letter-spacing:2px;text-transform:uppercase">Installation Gallery</p>
+    <div class="gallery-grid">
+      <div class="g-item tall">
+        <img src="/brochure-images/img1.jpg" alt="Rooftop Solar"/>
+        <div class="g-caption"><span>Large-Scale Industrial Rooftop Solar â€” West Bengal</span></div>
+      </div>
+      <div class="g-item">
+        <img src="/brochure-images/img2.jpg" alt="Solar installation"/>
+        <div class="g-caption"><span>Factory Solar Installation</span></div>
+      </div>
+      <div class="g-item">
+        <img src="/brochure-images/img4.jpg" alt="Inverters"/>
+        <div class="g-caption"><span>Inverter &amp; ACDB Setup</span></div>
+      </div>
+      <div class="g-item">
+        <img src="/brochure-images/img3.jpg" alt="Panel installation"/>
+        <div class="g-caption"><span>Industrial Panel Mounting</span></div>
+      </div>
+      <div class="g-item">
+        <img src="/brochure-images/img5.jpg" alt="Solar array"/>
+        <div class="g-caption"><span>Commercial On-Grid System</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="background:linear-gradient(90deg,#0a1628,#15803d);padding:10px 40px;display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+    <p style="font-size:9.5px;color:rgba(255,255,255,.7)">Total Installed Capacity Across Listed Projects: <strong style="color:#fbbf24">3,261 kW+</strong></p>
+    <p style="font-size:9.5px;color:rgba(255,255,255,.7)">reonenergy.in &nbsp;|&nbsp; +91 8436649991</p>
+  </div>
+</div>
+<!-- PAGE 5: GREEN MESSAGE + CONTACT -->
+<style>
+.p5{background:#fff;display:flex;flex-direction:column}
+.green-msg{background:linear-gradient(160deg,#052e16 0%,#065f46 50%,#0a3d1f 100%);padding:36px 40px;position:relative;overflow:hidden;flex:1}
+.green-msg-bg{position:absolute;inset:0;background:url('/brochure-images/img5.jpg') center/cover no-repeat;opacity:.12}
+.green-msg-circles{position:absolute;top:-80px;right:-80px;width:300px;height:300px;background:radial-gradient(circle,rgba(74,222,128,.15),transparent 70%);border-radius:50%}
+.green-msg-content{position:relative;z-index:2}
+.green-msg .sec-label{color:#86efac}
+.green-msg .sec-title{color:#fff;font-size:24px;margin-bottom:10px}
+.green-msg .sec-title span{color:#4ade80}
+.green-quote{font-size:14px;color:#d1fae5;font-style:italic;margin-bottom:24px;line-height:1.65;padding-left:16px;border-left:3px solid #4ade80}
+.green-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:28px}
+.green-item{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:16px 10px;text-align:center}
+.green-item-icon{font-size:24px;margin-bottom:8px}
+.green-item-title{font-size:9.5px;font-weight:700;color:#86efac;line-height:1.3;letter-spacing:.3px}
+
+.gallery-full{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:0 40px;margin-bottom:14px}
+.gf-item{border-radius:10px;overflow:hidden;position:relative;height:100px}
+.gf-item img{width:100%;height:100%;object-fit:cover;filter:brightness(.8)}
+.gf-overlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.65),transparent);display:flex;align-items:flex-end;padding:7px 10px}
+.gf-caption{font-size:8.5px;color:#fff;font-weight:600;letter-spacing:.3px}
+
+/* contact */
+.contact-section{background:linear-gradient(135deg,#0a1628 0%,#0d2d4e 100%);padding:24px 40px 20px}
+.contact-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:32px;margin-top:16px}
+.contact-left .company-name{font-family:'Outfit',sans-serif;font-size:22px;font-weight:900;color:#fff;margin-bottom:4px}
+.company-sub{font-size:10px;color:rgba(255,255,255,.5);letter-spacing:2px;text-transform:uppercase;margin-bottom:16px}
+.contact-line{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px}
+.contact-icon{width:30px;height:30px;background:rgba(22,163,74,.2);border:1px solid rgba(22,163,74,.3);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.contact-text p{font-size:10px;color:rgba(255,255,255,.5);margin-bottom:1px}
+.contact-text span{font-size:11.5px;color:#fff;font-weight:600}
+.contact-right{display:flex;flex-direction:column;justify-content:center;gap:12px}
+.cta-card{background:linear-gradient(135deg,#16a34a,#15803d);border-radius:12px;padding:16px;text-align:center}
+.cta-card h4{font-family:'Outfit',sans-serif;font-size:14px;font-weight:800;color:#fff;margin-bottom:4px}
+.cta-card p{font-size:10px;color:#d1fae5;line-height:1.5}
+.cta-phone{font-size:18px;font-weight:900;color:#fbbf24;margin-top:6px;font-family:'Outfit',sans-serif}
+
+.footer-bar{background:linear-gradient(90deg,#052e16,#15803d,#052e16);padding:12px 40px;display:flex;justify-content:space-between;align-items:center}
+.footer-bar p{font-size:10px;color:rgba(255,255,255,.7)}
+.footer-bar .quote{color:#d1fae5;font-style:italic;font-size:10.5px}
+</style>
+
+<div class="page p5">
+  <div class="green-msg">
+    <div class="green-msg-bg"></div>
+    <div class="green-msg-circles"></div>
+    <div class="green-msg-content">
+      <p class="sec-label">Our Green Commitment</p>
+      <h2 class="sec-title">Towards a <span>Cleaner &amp; Brighter</span> Future</h2>
+      <p class="green-quote">"Solar energy is not just an investment â€” it is a step toward environmental responsibility, energy independence, and a sustainable legacy for future generations."</p>
+      <div class="green-grid">
+        <div class="green-item"><div class="green-item-icon">ðŸ’¡</div><div class="green-item-title">Lower Electricity Bills</div></div>
+        <div class="green-item"><div class="green-item-icon">ðŸŒ</div><div class="green-item-title">Reduced Carbon Emissions</div></div>
+        <div class="green-item"><div class="green-item-icon">â™»ï¸</div><div class="green-item-title">Sustainable Development</div></div>
+        <div class="green-item"><div class="green-item-icon">ðŸŒ¿</div><div class="green-item-title">Green &amp; Clean Environment</div></div>
+        <div class="green-item"><div class="green-item-icon">âš¡</div><div class="green-item-title">Energy Security for Future</div></div>
+      </div>
+      <p style="font-size:13px;color:#fbbf24;font-weight:700;font-style:italic;text-align:center">"Empowering India with Renewable Energy â€” Go Solar Today with REON Energies Pvt. Ltd."</p>
+    </div>
+  </div>
+
+  <div class="gallery-full">
+    <div class="gf-item">
+      <img src="/brochure-images/img1.jpg" alt="Rooftop Solar"/>
+      <div class="gf-overlay"><span class="gf-caption">Industrial Rooftop Installation</span></div>
+    </div>
+    <div class="gf-item">
+      <img src="/brochure-images/img2.jpg" alt="Factory Solar"/>
+      <div class="gf-overlay"><span class="gf-caption">Large Factory Solar Setup</span></div>
+    </div>
+    <div class="gf-item">
+      <img src="/brochure-images/img4.jpg" alt="Inverter Setup"/>
+      <div class="gf-overlay"><span class="gf-caption">Solar Inverter Installation</span></div>
+    </div>
+  </div>
+
+  <div class="contact-section">
+    <p class="sec-label" style="color:#86efac">Get In Touch</p>
+    <h3 style="font-family:'Outfit',sans-serif;font-size:20px;font-weight:800;color:#fff">Contact <span style="color:#4ade80">REON Energies</span></h3>
+    <div class="contact-grid">
+      <div class="contact-left">
+        <div class="company-name">REON ENERGIES</div>
+        <div class="company-sub">Private Limited â€” Solar EPC Company</div>
+        <div class="contact-line">
+          <div class="contact-icon">ðŸ“</div>
+          <div class="contact-text"><p>Address</p><span>Sinherbheri, Singur, Hooghly, West Bengal â€“ 712409</span></div>
+        </div>
+        <div class="contact-line">
+          <div class="contact-icon">ðŸ“ž</div>
+          <div class="contact-text"><p>Phone</p><span>+91 8436649991</span></div>
+        </div>
+        <div class="contact-line">
+          <div class="contact-icon">ðŸ“§</div>
+          <div class="contact-text"><p>Email</p><span>reonenergiespvtltd@gmail.com</span></div>
+        </div>
+        <div class="contact-line">
+          <div class="contact-icon">ðŸŒ</div>
+          <div class="contact-text"><p>Website</p><span>reonenergy.in</span></div>
+        </div>
+      </div>
+      <div class="contact-right">
+        <div class="cta-card">
+          <h4>Get a Free Site Assessment</h4>
+          <p>Our solar experts will visit your site, assess your requirements, and provide a customized proposal at no cost.</p>
+          <div class="cta-phone">+91 8436649991</div>
+        </div>
+        <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:12px;text-align:center">
+          <p style="font-size:9px;color:rgba(255,255,255,.5);margin-bottom:4px">VISIT OUR WEBSITE</p>
+          <p style="font-size:14px;font-weight:800;color:#4ade80;font-family:'Outfit',sans-serif">reonenergy.in</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-bar">
+    <p>Â© 2025 REON Energies Private Limited. All Rights Reserved.</p>
+    <p class="quote">"Go Solar Today with REON Energies Pvt. Ltd."</p>
+  </div>
+</div>
+</body></html>

@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS quotations (
     total_interest NUMERIC(15,2),
     total_emi_paid NUMERIC(15,2),
     pdf_url TEXT,
+    raw_data JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

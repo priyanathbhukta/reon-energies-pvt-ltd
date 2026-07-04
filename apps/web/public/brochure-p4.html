@@ -1,0 +1,107 @@
+<!-- PAGE 4: MAJOR CLIENTS TABLE + GALLERY -->
+<style>
+.p4{background:#fff;display:flex;flex-direction:column}
+.clients-header{background:linear-gradient(90deg,#15803d,#16a34a);padding:22px 40px}
+.clients-header .sec-label{color:#d1fae5}
+.clients-header .sec-title{color:#fff;font-size:22px}
+.clients-header .sec-title span{color:#fbbf24}
+
+.clients-table-wrap{padding:16px 40px 10px;flex:1}
+.clients-intro{font-size:11px;color:#4b5563;margin-bottom:14px;line-height:1.6}
+.clients-intro strong{color:#15803d}
+
+table.projects-table{width:100%;border-collapse:collapse;font-size:10px}
+.projects-table thead tr{background:linear-gradient(90deg,#0a1628,#0d3b5e)}
+.projects-table thead th{padding:10px 10px;text-align:left;color:#fff;font-weight:600;font-size:9.5px;letter-spacing:.5px;text-transform:uppercase}
+.projects-table thead th:last-child{text-align:center}
+.projects-table tbody tr{border-bottom:1px solid #f1f5f9}
+.projects-table tbody tr:nth-child(even){background:#f8fafc}
+.projects-table tbody tr:nth-child(odd){background:#fff}
+.projects-table tbody tr:hover{background:#f0fdf4}
+.projects-table td{padding:8px 10px;vertical-align:middle;color:#374151}
+.projects-table td:first-child{font-weight:600;color:#0a1628;width:30px;text-align:center}
+.projects-table td.client-name{font-weight:600;color:#1e3a5f}
+.projects-table td.capacity{text-align:center}
+.kw-badge{display:inline-block;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;font-size:9px;font-weight:700;padding:3px 10px;border-radius:20px}
+.kw-badge.large{background:linear-gradient(135deg,#d97706,#b45309)}
+.kw-badge.medium{background:linear-gradient(135deg,#0369a1,#075985)}
+
+/* gallery */
+.gallery-section{padding:12px 40px 0}
+.gallery-grid{display:grid;grid-template-columns:2fr 1fr 1fr;grid-template-rows:110px 110px;gap:6px;margin-top:10px}
+.g-item{border-radius:10px;overflow:hidden;position:relative}
+.g-item.tall{grid-row:span 2}
+.g-item img{width:100%;height:100%;object-fit:cover}
+.g-caption{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(0,0,0,.75),transparent);padding:6px 10px}
+.g-caption span{font-size:8.5px;color:#fff;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+</style>
+
+<div class="page p4">
+  <div class="clients-header">
+    <p class="sec-label">Our Track Record</p>
+    <h2 class="sec-title">Major Clients of <span>Reon Energies Pvt Ltd</span></h2>
+  </div>
+
+  <div class="clients-table-wrap">
+    <p class="clients-intro">We have successfully executed solar EPC projects for leading hospitals, educational institutions, industries, and commercial establishments across <strong>West Bengal</strong>. Our portfolio demonstrates large-scale execution capability and technical excellence.</p>
+
+    <table class="projects-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Client / Organization</th>
+          <th>Location</th>
+          <th>Capacity</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td class="client-name">Ramakrishna Mission Shilpapitha</td><td>Belgharia, Kolkata</td><td class="capacity"><span class="kw-badge medium">52 kW</span></td></tr>
+        <tr><td>2</td><td class="client-name">Ecos Housing Project</td><td>New Town, Kolkata</td><td class="capacity"><span class="kw-badge">26 kW</span></td></tr>
+        <tr><td>3</td><td class="client-name">Metalist Consultant Pvt. Ltd.</td><td>New Town, Kolkata</td><td class="capacity"><span class="kw-badge">8 kW</span></td></tr>
+        <tr><td>4</td><td class="client-name">Electro Steel Castings Limited</td><td>Khardha, Kolkata</td><td class="capacity"><span class="kw-badge medium">35 kW</span></td></tr>
+        <tr><td>5</td><td class="client-name">Bankura Medical College &amp; Hospital</td><td>Bankura, WB</td><td class="capacity"><span class="kw-badge">10 kW</span></td></tr>
+        <tr><td>6</td><td class="client-name">Times of India Building</td><td>Salt Lake Sector-5, Kolkata</td><td class="capacity"><span class="kw-badge medium">40 kW</span></td></tr>
+        <tr><td>7</td><td class="client-name">Agrico Industries</td><td>Howrah, WB</td><td class="capacity"><span class="kw-badge medium">40 kW</span></td></tr>
+        <tr><td>8</td><td class="client-name">Mali Agri Tech Pvt. Ltd.</td><td>Ranaghat, Nadia</td><td class="capacity"><span class="kw-badge large">80 kW</span></td></tr>
+        <tr><td>9</td><td class="client-name">Nicco Park</td><td>Salt Lake-5 / New Town</td><td class="capacity"><span class="kw-badge large">125 kW</span></td></tr>
+        <tr><td>10</td><td class="client-name">M/s Allen Laboratories Limited</td><td>Kolkata</td><td class="capacity"><span class="kw-badge large">160 kW</span></td></tr>
+        <tr><td>11</td><td class="client-name">G. K. Plastics Pvt. Ltd.</td><td>Bandel, Hooghly</td><td class="capacity"><span class="kw-badge large">160 kW</span></td></tr>
+        <tr><td>12</td><td class="client-name">Apollo Gleneagles Hospitals</td><td>EM Bypass, Kolkata</td><td class="capacity"><span class="kw-badge large" style="background:linear-gradient(135deg,#7c3aed,#6d28d9)">325 kW</span></td></tr>
+        <tr><td>13</td><td class="client-name">Oscar Equipments Pvt. Ltd.</td><td>Bishnupur, Bankura</td><td class="capacity"><span class="kw-badge large" style="background:linear-gradient(135deg,#7c3aed,#6d28d9)">500 kW</span></td></tr>
+        <tr><td>14</td><td class="client-name">Kamala Industries</td><td>Sangur, WB</td><td class="capacity"><span class="kw-badge large" style="background:linear-gradient(135deg,#dc2626,#b91c1c)">700 kW</span></td></tr>
+        <tr><td>15</td><td class="client-name">Century Ply Boards India Ltd.</td><td>West Bengal</td><td class="capacity"><span class="kw-badge large" style="background:linear-gradient(135deg,#d97706,#92400e);font-size:10px;padding:4px 12px">1500 kW</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="gallery-section">
+    <p style="font-size:9px;color:#16a34a;font-weight:700;letter-spacing:2px;text-transform:uppercase">Installation Gallery</p>
+    <div class="gallery-grid">
+      <div class="g-item tall">
+        <img src="/brochure-images/img1.jpg" alt="Rooftop Solar"/>
+        <div class="g-caption"><span>Large-Scale Industrial Rooftop Solar — West Bengal</span></div>
+      </div>
+      <div class="g-item">
+        <img src="/brochure-images/img2.jpg" alt="Solar installation"/>
+        <div class="g-caption"><span>Factory Solar Installation</span></div>
+      </div>
+      <div class="g-item">
+        <img src="/brochure-images/img4.jpg" alt="Inverters"/>
+        <div class="g-caption"><span>Inverter &amp; ACDB Setup</span></div>
+      </div>
+      <div class="g-item">
+        <img src="/brochure-images/img3.jpg" alt="Panel installation"/>
+        <div class="g-caption"><span>Industrial Panel Mounting</span></div>
+      </div>
+      <div class="g-item">
+        <img src="/brochure-images/img5.jpg" alt="Solar array"/>
+        <div class="g-caption"><span>Commercial On-Grid System</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="background:linear-gradient(90deg,#0a1628,#15803d);padding:10px 40px;display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+    <p style="font-size:9.5px;color:rgba(255,255,255,.7)">Total Installed Capacity Across Listed Projects: <strong style="color:#fbbf24">3,261 kW+</strong></p>
+    <p style="font-size:9.5px;color:rgba(255,255,255,.7)">reonenergy.in &nbsp;|&nbsp; +91 8436649991</p>
+  </div>
+</div>
