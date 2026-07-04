@@ -44,24 +44,32 @@ export async function authenticate(req, res, next) {
       );
     }
 
-    // If not found and this is a legacy admin token (has username), look up by admin id
+    // If not found and this is a legacy admin token (has username), verify against admins table
     if (userResult.rows.length === 0 && decoded.username) {
-      // Legacy admin token — find the super_admin user in users table
-      const superAdminResult = await pool.query(
-        `SELECT u.id, u.full_name, u.email, u.mobile, u.avatar_url, u.is_active,
-                array_agg(DISTINCT r.name) FILTER (WHERE r.name IS NOT NULL) as roles,
-                array_agg(DISTINCT p.name) FILTER (WHERE p.name IS NOT NULL) as permissions
-         FROM users u
-         JOIN user_roles ur ON u.id = ur.user_id
-         JOIN roles r ON ur.role_id = r.id
-         LEFT JOIN role_permissions rp ON r.id = rp.role_id
-         LEFT JOIN permissions p ON rp.permission_id = p.id
-         WHERE r.name = 'super_admin' AND u.deleted_at IS NULL
-         GROUP BY u.id
-         LIMIT 1`
+      const adminResult = await pool.query(
+        `SELECT id, username FROM admins WHERE id = $1`,
+        [userId]
       );
-      if (superAdminResult.rows.length > 0) {
-        userResult = superAdminResult;
+      if (adminResult.rows.length > 0) {
+        userResult = {
+          rows: [{
+            id: adminResult.rows[0].id.toString(),
+            full_name: adminResult.rows[0].username,
+            email: 'admin@reonenergy.in',
+            mobile: '',
+            avatar_url: null,
+            is_active: true,
+            roles: ['super_admin'],
+            permissions: [
+              'users.create', 'users.read', 'users.update', 'users.delete',
+              'partners.create', 'partners.read', 'partners.update', 'partners.approve',
+              'leads.create', 'leads.read', 'leads.read_all', 'leads.update', 'leads.delete', 'leads.assign',
+              'commissions.read', 'commissions.manage', 'payouts.read', 'payouts.process',
+              'marketing.read', 'marketing.manage', 'analytics.read', 'analytics.read_all',
+              'admin.access', 'audit.read'
+            ]
+          }]
+        };
       }
     }
 
