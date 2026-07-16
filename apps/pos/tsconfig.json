@@ -15,10 +15,7 @@
     "incremental": true,
     "plugins": [{ "name": "next" }],
     "paths": {
-      "@/*": ["./src/*"],
-      "@reon/ui": ["../../packages/ui/src"],
-      "@reon/types": ["../../packages/types/src"],
-      "@reon/utils": ["../../packages/utils/src"]
+      "@/*": ["./src/*"]
     },
     "baseUrl": "."
   },

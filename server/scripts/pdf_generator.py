@@ -917,20 +917,22 @@ def generate_quotation(data: dict, output_path: str) -> str:
 # SECTION 7 — DEFAULT / MASTER DATA
 # ═══════════════════════════════════════════════════════════════════════════════
 
-_DEFAULT_BOM = [
+__DEFAULT_BOM = [
     {"item": "PV MODULES",                "spec": "590Wp Mono-Crystalline Bifacial N-Type Topcon", "qty": "6 Nos.",        "brand": "UTL / ADANI / VIKRAM / LUMINOUS"},
     {"item": "STRING INVERTER",           "spec": "On-Grid, 1-Phase, Efficiency >98%, IP65",       "qty": "1 No.",         "brand": "UTL / VIKRAM / LUMINOUS / HAVELLS"},
     {"item": "MODULE MOUNTING STRUCTURE", "spec": "Hot-Dip Galvanised GI, Rooftop / Ground",       "qty": "As per Design", "brand": "AFTR Market / Fabricated"},
     {"item": "SOLAR DC CABLE",            "spec": "4 Sq.mm, UV-Protected, TÜV Certified",          "qty": "As per Design", "brand": "Apar Industries / Polycab / KEI"},
-    {"item": "AC CABLE",                  "spec": "1.1kV UV-Protected Aluminium Armoured",         "qty": "As per Design", "brand": "Apar Industries / Polycab / KEI"},
+    {"item": "AC CABLE",                  "spec": "4 Sqmm 2 Core IP68 UV Protected PVC COTED",         "qty": "As per Design", "brand": "Apar Industries / Polycab / KEI"},
     {"item": "MC4 CONNECTORS",            "spec": "UV-Protected, IP67, DC Rated",                  "qty": "As required",   "brand": "MC4 / Elmex / Phonix / Havells"},
     {"item": "ACDB",                      "spec": "IP55, MCB Protection, Type-II SPD",             "qty": "1 Set",         "brand": "Apar Industries / Polycab / KEI"},
     {"item": "DCDB",                      "spec": "IP55, String Fuses, SPD Type-II",               "qty": "1 Set",         "brand": "Apar Industries / Polycab / KEI"},
-    {"item": "EARTHING KIT",              "spec": "6 ft Copper Bonded Rod + GI Strip",             "qty": "As required",   "brand": "True Power Ltd / ETP Earthing"},
+    {"item": "EARTHING KIT",              "spec": "6 ft Copper Bonded Rod + PIT cover with CHEMICAL BENTONITE",             "qty": "As required",   "brand": "True Power Ltd / ETP Earthing"},
     {"item": "EARTHING CABLE",            "spec": "2.5 Sq.mm Copper, Single Core",                 "qty": "As required",   "brand": "Reputed Make"},
     {"item": "LIGHTNING ARRESTOR",        "spec": "ESE Type, Class I+II Protection",               "qty": "As required",   "brand": "True Power / Nitro / ETP LPS"},
-    {"item": "CABLE TRAY & ACCESSORIES",  "spec": "GI Perforated Tray, ISI Mark",                  "qty": "As required",   "brand": "TATA / JINDAL / SHYAM / JSW"},
+    {"item": "CABLE TRAY & ACCESSORIES",  "spec": "Cable Tray PCV 45*25 Cable Tray ISI MARK",      "qty": "As required",   "brand": "TATA / JINDAL / SHYAM / JSW"},
+    {"item": "PVC WEARING",               "spec": "20 MM water pipe for covering DC CABLE and AC CABLE ",      "qty": "As required",         "brand": "SUPREME / FINOLEX / ASTRAL"},
 ]
+
 
 _DEFAULT_SCOPE = [
     "Detailed Solar Power Plant Design & Engineering.",
@@ -982,9 +984,9 @@ _DEFAULT_DELIVERY = [
     "Final handover, O&M training and documentation: within 1 week of commissioning.",
 ]
 _DEFAULT_PAYMENT = [
-    "30% of total order value as advance at the time of Purchase Order.",
-    "65% of total order value on readiness of material for dispatch.",
-    "5% of total order value on successful commissioning and client acceptance.",
+    "30% of total order value at the time of confirming the Purchase Order / Agreement signing.",
+    "60% of total order value at the time of material delivery to customer's site.",
+    "10% of total order value after successful installation and commissioning.",
 ]
 _DEFAULT_TERMS = [
     {"title": "Approvals:",
@@ -997,6 +999,16 @@ _DEFAULT_TERMS = [
      "content": "Neither party shall be liable for delays caused by circumstances beyond reasonable control — acts of God, government orders, or natural calamities."},
     {"title": "Dispute Resolution:",
      "content": "Any dispute shall first be resolved through mutual negotiation; failing which, through arbitration under the Indian Arbitration Act, jurisdiction: Hooghly, West Bengal."},
+    {"title": "Structure:",
+     "content": "This quotation includes REON's standard Hot-Dip Galvanized (Hot GI / HDG) mounting structure. Any customized structure or additional fabrication requirement will be charged extra, as per actual."},
+    {"title": "ETA:",
+     "content": "Delivery & installation shall be completed within ___ working days from the date of advance payment, receipt of technical approval, and material availability at site."},
+    {"title": "Validity:",
+     "content": "This quotation is valid for 15 days from the date of issue. Post expiry, prices and terms are subject to revision without prior notice."},
+    {"title": "Scope Change:",
+     "content": "Any additional work or change in project scope after order confirmation will be treated as a variation order and charged separately, as mutually agreed."},
+    {"title": "Taxes:",
+     "content": "GST and all other applicable government taxes will be levied as per prevailing government regulations at the time of invoicing."},
 ]
 _DEFAULT_ASSUMPTIONS = [
     "Module Mounting Structures designed to suit the customer's specific roof/ground conditions.",

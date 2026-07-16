@@ -343,10 +343,9 @@ export default function QuotationForm({ editData, onClearEdit }: QuotationFormPr
             <Field label="Solar Module Technology" name="module_technology" value={form.module_technology}
                    onChange={update} required
                    options={[
-                     'Mono-Crystalline Bifacial N-Type Topcon Silicon Technology',
-                     'Mono-Crystalline Monofacial Topcon Technology',
-                     'Polycrystalline Silicon Cells',
-                     'Thin Film PV Modules',
+                     'N-Type TOPCon Monocrystalline Bifacial',
+                     'Mono PERC Half-Cut Bifacial Solar Module',
+                     ' N-Type HJT Bifacial',
                    ]} />
             <Field label="Solar Inverter Class" name="inverter_type" value={form.inverter_type}
                    onChange={update} required half
