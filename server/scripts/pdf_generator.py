@@ -917,7 +917,7 @@ def generate_quotation(data: dict, output_path: str) -> str:
 # SECTION 7 — DEFAULT / MASTER DATA
 # ═══════════════════════════════════════════════════════════════════════════════
 
-__DEFAULT_BOM = [
+_DEFAULT_BOM = [
     {"item": "PV MODULES",                "spec": "590Wp Mono-Crystalline Bifacial N-Type Topcon", "qty": "6 Nos.",        "brand": "UTL / ADANI / VIKRAM / LUMINOUS"},
     {"item": "STRING INVERTER",           "spec": "On-Grid, 1-Phase, Efficiency >98%, IP65",       "qty": "1 No.",         "brand": "UTL / VIKRAM / LUMINOUS / HAVELLS"},
     {"item": "MODULE MOUNTING STRUCTURE", "spec": "Hot-Dip Galvanised GI, Rooftop / Ground",       "qty": "As per Design", "brand": "AFTR Market / Fabricated"},
