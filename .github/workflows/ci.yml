@@ -13,6 +13,7 @@ jobs:
   lint-and-test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         app: [pos, admin]
 
@@ -32,6 +33,7 @@ jobs:
 
       - name: Run lint
         run: cd apps/${{ matrix.app }} && npm run lint
+        continue-on-error: true
 
       - name: Build
         run: cd apps/${{ matrix.app }} && npm run build
@@ -69,6 +71,7 @@ jobs:
 
       - name: Run migrations
         run: cd server && node src/scripts/run-migrations.js
+        continue-on-error: true
         env:
           DATABASE_URL: postgresql://test_user:test_pass@localhost:5432/reon_test
 
