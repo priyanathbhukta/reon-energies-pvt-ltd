@@ -139,6 +139,27 @@ export default function InvoiceForm({ editData, onClearEdit }) {
   
   const [items, setItems] = useState([{ id: 1, name: '', description: '', hsn: '', quantity: 1, unit: 'Nos', rate: 0, tax: 18 }]);
   const [charges, setCharges] = useState({ loadingCharges: 0 });
+  const [invLoading, setInvLoading] = useState(false);
+
+  const fetchNextInvoiceNo = async () => {
+    setInvLoading(true);
+    try {
+      const token = localStorage.getItem('reon_admin_token');
+      const res = await fetch(`${API}/api/admin/invoices/next-number`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.nextInvoiceNo) {
+          setInvoiceDetails(prev => ({ ...prev, invoiceNo: data.nextInvoiceNo }));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch next invoice number', err);
+    } finally {
+      setInvLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (editData) {
@@ -157,6 +178,8 @@ export default function InvoiceForm({ editData, onClearEdit }) {
         } catch(e) {
             console.error('Error loading editData', e);
         }
+    } else {
+        fetchNextInvoiceNo();
     }
   }, [editData]);
 
@@ -243,7 +266,36 @@ export default function InvoiceForm({ editData, onClearEdit }) {
         <>
           <SectionHead title="Invoice Details" />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
-            <Field label="Invoice No *" name="invoiceNo" value={invoiceDetails.invoiceNo} onChange={updateObj(setInvoiceDetails)} half required />
+            <div style={{ flex: '0 0 calc(50% - 6px)', minWidth: 0 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: C.teal, display: 'block', marginBottom: 4 }}>
+                Invoice No (Auto-Generated) <span style={{ color: C.orange }}>*</span>
+              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  name="invoiceNo"
+                  value={invoiceDetails.invoiceNo}
+                  onChange={updateObj(setInvoiceDetails)}
+                  type="text"
+                  style={{
+                    flex: 1, padding: '9px 12px', border: `1.5px solid ${C.border}`,
+                    borderRadius: 7, fontSize: 13, outline: 'none', background: C.light,
+                    color: C.navy, fontWeight: 600
+                  }}
+                  placeholder="Auto-fetching..."
+                />
+                <button
+                  type="button"
+                  onClick={fetchNextInvoiceNo}
+                  disabled={invLoading}
+                  style={{
+                    padding: '9px 14px', background: C.teal, color: 'white', border: 'none',
+                    borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer'
+                  }}
+                >
+                  {invLoading ? '...' : 'Refresh'}
+                </button>
+              </div>
+            </div>
             <Field label="Invoice Date" name="invoiceDate" value={invoiceDetails.invoiceDate} onChange={updateObj(setInvoiceDetails)} type="date" half />
             <Field label="Due Date" name="dueDate" value={invoiceDetails.dueDate} onChange={updateObj(setInvoiceDetails)} type="date" half />
             <Field label="E-way Bill No" name="ewayBillNumber" value={invoiceDetails.ewayBillNumber} onChange={updateObj(setInvoiceDetails)} half />

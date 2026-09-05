@@ -31,10 +31,70 @@ if (!fs.existsSync(PDF_DIR)) {
 
 const runPythonCommand = process.platform === 'win32' ? 'python' : 'python3';
 
+// ── Helper: Get current Financial Year (e.g. '26-27') ─────────────────────
+export function getCurrentFinancialYear(date = new Date()) {
+  const d = new Date(date);
+  const month = d.getMonth();
+  const year = d.getFullYear();
+  const startYear = month >= 3 ? year : year - 1;
+  const endYear = startYear + 1;
+  return `${String(startYear).slice(-2)}-${String(endYear).slice(-2)}`;
+}
+
+// ── Helper: Get next Invoice Number dynamically from DB ───────────────────
+export async function getNextInvoiceNumber() {
+  const fy = getCurrentFinancialYear();
+  const query = `SELECT invoice_no FROM invoices WHERE invoice_no LIKE $1 OR invoice_no LIKE $2`;
+  const values = [`%/${fy}/%`, `%-${fy}-%`];
+  const { rows } = await pool.query(query, values);
+  
+  let maxSeq = 0;
+  for (const row of rows) {
+    if (!row.invoice_no) continue;
+    const match = row.invoice_no.match(/(\d+)$/);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num > maxSeq) {
+        maxSeq = num;
+      }
+    }
+  }
+  const nextSeqNum = maxSeq + 1;
+  const paddedSeq = String(nextSeqNum).padStart(3, '0');
+  const nextInvoiceNo = `INV/${fy}/${paddedSeq}`;
+  return { fy, maxSeq, nextSeqNum, paddedSeq, nextInvoiceNo };
+}
+
+// ── GET /api/admin/invoices/next-number ───────────────────────────────────
+router.get('/next-number', async (req, res) => {
+  try {
+    const info = await getNextInvoiceNumber();
+    res.json({
+      success: true,
+      financialYear: info.fy,
+      nextSeq: info.paddedSeq,
+      nextInvoiceNo: info.nextInvoiceNo,
+    });
+  } catch (err) {
+    console.error('Error fetching next invoice number:', err);
+    res.status(500).json({ error: 'Failed to fetch next invoice number' });
+  }
+});
+
 // POST /api/admin/invoices
 router.post('/', async (req, res) => {
   const data = req.body;
-  const invoiceNo = data.invoiceDetails?.invoiceNo || `INV/${Date.now()}`;
+  
+  // Dynamic runtime check: Resolve invoice number dynamically from DB if missing/placeholder
+  let invoiceNo = data.invoiceDetails?.invoiceNo;
+  if (!invoiceNo || invoiceNo.includes('000') || invoiceNo.includes('NNN')) {
+    const info = await getNextInvoiceNumber();
+    invoiceNo = info.nextInvoiceNo;
+    if (data.invoiceDetails) {
+      data.invoiceDetails.invoiceNo = invoiceNo;
+    }
+  }
+
   const pdfFileName = `${invoiceNo.replace(/\//g, '-')}.pdf`;
   const localPdfPath = path.join(PDF_DIR, pdfFileName);
 

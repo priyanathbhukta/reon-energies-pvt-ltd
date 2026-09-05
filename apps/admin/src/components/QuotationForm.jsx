@@ -142,6 +142,31 @@ export default function QuotationForm({ editData, onClearEdit }) {
   const [error,      setError]      = useState(null);
   const [successUrl, setSuccessUrl] = useState(null);
   const [financeSim, setFinanceSim] = useState(null);
+  const [financialYear, setFinancialYear] = useState('26-27');
+  const [seqLoading, setSeqLoading] = useState(false);
+
+  const fetchNextSeq = async () => {
+    setSeqLoading(true);
+    try {
+      const token = localStorage.getItem('reon_admin_token');
+      const res = await fetch(`${API}/api/admin/quotations/next-number`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.nextSeq) {
+          setForm(prev => ({ ...prev, quotation_no_seq: data.nextSeq }));
+        }
+        if (data.financialYear) {
+          setFinancialYear(data.financialYear);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch next quotation number', err);
+    } finally {
+      setSeqLoading(false);
+    }
+  };
 
   // ─── Derived pricing values ────────────────────────────────────────────────
   const kW       = parseFloat(form.system_capacity_kw) || 0;
@@ -169,6 +194,7 @@ export default function QuotationForm({ editData, onClearEdit }) {
       setStep(0);
       setSuccessUrl(null);
       setError(null);
+      fetchNextSeq();
     }
   }, [editData]);
 
@@ -217,11 +243,11 @@ export default function QuotationForm({ editData, onClearEdit }) {
       if (form.payment_mode === 'EMI / Loan') return financeSim !== null;
       return true;
     }
-    if (step === 5) return /^\d{3}$/.test(form.quotation_no_seq);
+    if (step === 5) return Boolean(form.quotation_no_seq);
     return true;
   };
 
-  const offerNo = `REPL/26-27/${form.quotation_no_seq || 'NNN'}`;
+  const offerNo = `REPL/${financialYear}/${form.quotation_no_seq || 'NNN'}`;
 
   const handleSubmit = async () => {
     setLoading(true);
@@ -549,16 +575,45 @@ export default function QuotationForm({ editData, onClearEdit }) {
         <>
           <SectionHead title="Quotation Numbering" />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 8 }}>
-            <Field label="3-Digit Sequence Number *" name="quotation_no_seq" type="text"
-                   value={form.quotation_no_seq} onChange={update}
-                   hint="e.g. 001, 042, 110" required half
-                   warn={seqWarn()} />
+            <div style={{ flex: '0 0 calc(50% - 6px)', minWidth: 0 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: C.teal, display: 'block', marginBottom: 4 }}>
+                Quotation Sequence No (Auto-Generated)
+              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  name="quotation_no_seq"
+                  value={form.quotation_no_seq}
+                  onChange={update}
+                  type="text"
+                  style={{
+                    flex: 1, padding: '9px 12px', border: `1.5px solid ${C.border}`,
+                    borderRadius: 7, fontSize: 13, outline: 'none', background: C.light,
+                    color: C.navy, fontWeight: 600
+                  }}
+                  placeholder="Auto-fetching..."
+                />
+                <button
+                  type="button"
+                  onClick={fetchNextSeq}
+                  disabled={seqLoading}
+                  style={{
+                    padding: '9px 14px', background: C.teal, color: 'white', border: 'none',
+                    borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer'
+                  }}
+                >
+                  {seqLoading ? '...' : 'Refresh'}
+                </button>
+              </div>
+              <div style={{ fontSize: 10.5, color: C.teal, marginTop: 4 }}>
+                ✓ Auto-checked from database for FY {financialYear}
+              </div>
+            </div>
             <div style={{ flex: '0 0 calc(50% - 6px)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
               <div style={{
-                padding: '9px 14px', background: /^\d{3}$/.test(form.quotation_no_seq) ? '#EBF9FB' : C.light,
-                border: `1.5px solid ${/^\d{3}$/.test(form.quotation_no_seq) ? C.teal : C.border}`,
+                padding: '9px 14px', background: Boolean(form.quotation_no_seq) ? '#EBF9FB' : C.light,
+                border: `1.5px solid ${Boolean(form.quotation_no_seq) ? C.teal : C.border}`,
                 borderRadius: 7, fontSize: 14, fontWeight: 700,
-                color: /^\d{3}$/.test(form.quotation_no_seq) ? C.navy : C.mid,
+                color: Boolean(form.quotation_no_seq) ? C.navy : C.mid,
               }}>
                 {offerNo}
               </div>

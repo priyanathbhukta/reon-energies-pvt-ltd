@@ -37,12 +37,69 @@ if (!fs.existsSync(PDF_DIR)) {
 
 const runPythonCommand = process.platform === 'win32' ? 'python' : 'python3';
 
+// ── Helper: Get current Financial Year (e.g. '26-27') ─────────────────────
+export function getCurrentFinancialYear(date = new Date()) {
+  const d = new Date(date);
+  const month = d.getMonth();
+  const year = d.getFullYear();
+  const startYear = month >= 3 ? year : year - 1;
+  const endYear = startYear + 1;
+  return `${String(startYear).slice(-2)}-${String(endYear).slice(-2)}`;
+}
+
+// ── Helper: Get next Quotation Number dynamically from DB ──────────────────
+export async function getNextQuotationNumber() {
+  const fy = getCurrentFinancialYear();
+  const query = `SELECT offer_no FROM quotations WHERE offer_no LIKE $1 OR offer_no LIKE $2`;
+  const values = [`%/${fy}/%`, `%-${fy}-%`];
+  const { rows } = await pool.query(query, values);
+  
+  let maxSeq = 0;
+  for (const row of rows) {
+    if (!row.offer_no) continue;
+    const match = row.offer_no.match(/(\d+)$/);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num > maxSeq) {
+        maxSeq = num;
+      }
+    }
+  }
+  const nextSeqNum = maxSeq + 1;
+  const paddedSeq = String(nextSeqNum).padStart(3, '0');
+  const nextOfferNo = `REPL/${fy}/${paddedSeq}`;
+  return { fy, maxSeq, nextSeqNum, paddedSeq, nextOfferNo };
+}
+
+// ── GET /api/admin/quotations/next-number ──────────────────────────────────
+router.get('/next-number', async (req, res) => {
+  try {
+    const info = await getNextQuotationNumber();
+    res.json({
+      success: true,
+      financialYear: info.fy,
+      nextSeq: info.paddedSeq,
+      nextOfferNo: info.nextOfferNo,
+    });
+  } catch (err) {
+    console.error('Error fetching next quotation number:', err);
+    res.status(500).json({ error: 'Failed to fetch next quotation number' });
+  }
+});
+
 // ── POST /api/admin/quotations ─────────────────────────────────────────────
 router.post('/', async (req, res) => {
   const data = req.body;
 
-  // Build quotation number: REPL/26-27/NNN
-  const offerNo = data.offerNo || data.offer_no || `REPL/26-27/${Date.now()}`;
+  // Dynamic runtime check: Resolve quotation number dynamically from DB if missing/placeholder
+  let offerNo = data.offerNo || data.offer_no;
+  if (!offerNo || offerNo.includes('NNN') || !data.quotation_no_seq) {
+    const info = await getNextQuotationNumber();
+    offerNo = info.nextOfferNo;
+    data.quotation_no_seq = info.paddedSeq;
+    data.offerNo = offerNo;
+    data.offer_no = offerNo;
+  }
 
   // PDF filename = quotation number with slashes replaced by dashes
   const pdfFileName = `${offerNo.replace(/\//g, '-')}.pdf`;
