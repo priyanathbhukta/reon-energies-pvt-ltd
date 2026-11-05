@@ -95,11 +95,15 @@ app.use('/api/dashboard', dashboardRouter);
 app.use('/api/content', contentRouter);
 app.use('/api/admin/quotations', authMiddleware, adminQuotationsRouter);
 app.use('/api/quotations', authenticate, adminQuotationsRouter);
+app.use('/api/v2/quotations', authenticate, adminQuotationsRouter);
 app.use('/api/admin/invoices', authMiddleware, adminInvoicesRouter);
 app.use('/api/projects', authMiddleware, projectsRouter);
 app.use('/api/pos', posRouter);
 app.use('/api/pos/documents', posDocumentsRouter);
 app.use('/api/leads', leadRouter);
+app.use('/api/v2/leads', leadRouter);
+app.use('/api/v2/pos', posRouter);
+app.use('/api/v2/auth', posAuthRouter);
 
 // Serve generated PDFs with dynamic auto-regeneration if missing
 app.use('/pdfs', pdfsRouter);

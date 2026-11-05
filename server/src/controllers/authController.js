@@ -582,4 +582,446 @@ router.post('/pos-change-password', authenticate, async (req, res) => {
   }
 });
 
+// ─── POST /api/auth/forgot-password ─────────────────────────
+// Request a password-reset OTP (public — no auth required)
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { identifier } = req.body;
+
+    if (!identifier || !identifier.trim()) {
+      return res.status(400).json({ error: 'Mobile number or email is required' });
+    }
+
+    const trimmed = identifier.trim();
+
+    // Look up user by mobile or email
+    const userResult = await pool.query(
+      `SELECT id, full_name, mobile, email FROM users
+       WHERE (mobile = $1 OR email = $1) AND deleted_at IS NULL
+       LIMIT 1`,
+      [trimmed]
+    );
+
+    // Always return success to prevent account enumeration
+    if (userResult.rows.length === 0) {
+      return res.json({
+        success: true,
+        message: 'If an account exists with this mobile/email, an OTP has been sent.',
+        expiresIn: config.otp.expiresInMinutes * 60,
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    // Rate limit — max 5 reset OTPs per 15 min
+    const recentOtps = await pool.query(
+      `SELECT COUNT(*) as count FROM otp_logs
+       WHERE (mobile = $1 OR user_id = $2) AND otp_type = 'password_reset'
+         AND created_at > NOW() - INTERVAL '15 minutes'`,
+      [user.mobile, user.id]
+    );
+
+    if (parseInt(recentOtps.rows[0].count) >= config.rateLimit.otpMax) {
+      return res.status(429).json({ error: 'Too many reset requests. Please try again later.' });
+    }
+
+    // Generate OTP
+    const otp = generateOtp(config.otp.length);
+    const otpHash = await bcrypt.hash(otp, 10);
+    const expiresAt = new Date(Date.now() + config.otp.expiresInMinutes * 60000);
+
+    // Store OTP
+    await pool.query(
+      `INSERT INTO otp_logs (mobile, user_id, otp_hash, otp_type, expires_at)
+       VALUES ($1, $2, $3, 'password_reset', $4)`,
+      [user.mobile, user.id, otpHash, expiresAt]
+    );
+
+    // TODO: Send OTP via SMS/email in production
+    if (config.server.env === 'development') {
+      console.log(`\n🔑 Password Reset OTP for ${trimmed}: ${otp}\n`);
+    }
+
+    res.json({
+      success: true,
+      message: 'If an account exists with this mobile/email, an OTP has been sent.',
+      expiresIn: config.otp.expiresInMinutes * 60,
+      // Only include OTP in development for testing
+      ...(config.server.env === 'development' && { _devOtp: otp }),
+    });
+  } catch (err) {
+    console.error('Forgot password error:', err.message);
+    res.status(500).json({ error: 'Failed to process password reset request' });
+  }
+});
+
+// ─── POST /api/auth/verify-reset-otp ────────────────────────
+// Verify OTP and issue a short-lived password-reset token
+router.post('/verify-reset-otp', async (req, res) => {
+  try {
+    const { identifier, otp } = req.body;
+
+    if (!identifier || !otp) {
+      return res.status(400).json({ error: 'Mobile/email and OTP are required' });
+    }
+
+    const trimmed = identifier.trim();
+
+    // Find user
+    const userResult = await pool.query(
+      `SELECT id, mobile FROM users
+       WHERE (mobile = $1 OR email = $1) AND deleted_at IS NULL
+       LIMIT 1`,
+      [trimmed]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid OTP or account not found' });
+    }
+
+    const user = userResult.rows[0];
+
+    // Find latest unused reset OTP for this user
+    const otpResult = await pool.query(
+      `SELECT * FROM otp_logs
+       WHERE user_id = $1 AND otp_type = 'password_reset' AND verified_at IS NULL
+       ORDER BY created_at DESC LIMIT 1`,
+      [user.id]
+    );
+
+    if (otpResult.rows.length === 0) {
+      return res.status(400).json({ error: 'No OTP found. Please request a new one.' });
+    }
+
+    const otpRecord = otpResult.rows[0];
+
+    // Check expiry
+    if (new Date() > new Date(otpRecord.expires_at)) {
+      return res.status(400).json({ error: 'OTP has expired. Please request a new one.' });
+    }
+
+    // Check attempts
+    if (otpRecord.attempts >= (otpRecord.max_attempts || config.otp.maxAttempts)) {
+      return res.status(400).json({ error: 'Too many failed attempts. Please request a new OTP.' });
+    }
+
+    // Verify OTP
+    const isValid = await bcrypt.compare(otp, otpRecord.otp_hash);
+
+    if (!isValid) {
+      await pool.query(
+        'UPDATE otp_logs SET attempts = attempts + 1 WHERE id = $1',
+        [otpRecord.id]
+      );
+      return res.status(400).json({ error: 'Invalid OTP. Please try again.' });
+    }
+
+    // Mark OTP as verified
+    await pool.query(
+      'UPDATE otp_logs SET verified_at = NOW() WHERE id = $1',
+      [otpRecord.id]
+    );
+
+    // Issue a short-lived reset token (10 minutes)
+    const resetToken = jwt.sign(
+      { userId: user.id, purpose: 'password_reset' },
+      config.jwt.accessSecret,
+      { expiresIn: '10m' }
+    );
+
+    res.json({
+      success: true,
+      message: 'OTP verified successfully',
+      resetToken,
+    });
+  } catch (err) {
+    console.error('Verify reset OTP error:', err.message);
+    res.status(500).json({ error: 'OTP verification failed' });
+  }
+});
+
+// ─── POST /api/auth/reset-password ──────────────────────────
+// Reset password using a valid reset token
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { resetToken, newPassword, confirmPassword } = req.body;
+
+    if (!resetToken || !newPassword || !confirmPassword) {
+      return res.status(400).json({ error: 'Reset token, new password, and confirmation are required' });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ error: 'Passwords do not match' });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+
+    // Verify the reset token
+    let decoded;
+    try {
+      decoded = jwt.verify(resetToken, config.jwt.accessSecret);
+    } catch (tokenErr) {
+      if (tokenErr.name === 'TokenExpiredError') {
+        return res.status(400).json({ error: 'Reset link has expired. Please request a new one.' });
+      }
+      return res.status(400).json({ error: 'Invalid reset token' });
+    }
+
+    if (decoded.purpose !== 'password_reset') {
+      return res.status(400).json({ error: 'Invalid reset token' });
+    }
+
+    // Hash new password
+    const newHash = await bcrypt.hash(newPassword, 12);
+
+    // Update password
+    const updateResult = await pool.query(
+      'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2 AND deleted_at IS NULL RETURNING id',
+      [newHash, decoded.userId]
+    );
+
+    if (updateResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Invalidate all existing sessions
+    await pool.query('DELETE FROM user_sessions WHERE user_id = $1', [decoded.userId]);
+
+    // Audit log
+    await pool.query(
+      `INSERT INTO audit_logs (user_id, action, resource, ip_address)
+       VALUES ($1, 'password_reset', 'auth', $2)`,
+      [decoded.userId, req.ip]
+    ).catch(() => {}); // Non-fatal
+
+    res.json({ success: true, message: 'Password reset successfully. Please log in with your new password.' });
+  } catch (err) {
+    console.error('Reset password error:', err.message);
+    res.status(500).json({ error: 'Password reset failed' });
+  }
+});
+
+// ─── POST /api/auth/forgot-password ─────────────────────────
+// Request a password-reset OTP (public — no auth required)
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { identifier } = req.body;
+
+    if (!identifier || !identifier.trim()) {
+      return res.status(400).json({ error: 'Mobile number or email is required' });
+    }
+
+    const trimmed = identifier.trim();
+
+    // Look up user by mobile or email
+    const userResult = await pool.query(
+      `SELECT id, full_name, mobile, email FROM users
+       WHERE (mobile = $1 OR email = $1) AND deleted_at IS NULL
+       LIMIT 1`,
+      [trimmed]
+    );
+
+    // Always return success to prevent account enumeration
+    if (userResult.rows.length === 0) {
+      return res.json({
+        success: true,
+        message: 'If an account exists with this mobile/email, an OTP has been sent.',
+        expiresIn: config.otp.expiresInMinutes * 60,
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    // Rate limit — max 5 reset OTPs per 15 min
+    const recentOtps = await pool.query(
+      `SELECT COUNT(*) as count FROM otp_logs
+       WHERE (mobile = $1 OR user_id = $2) AND otp_type = 'password_reset'
+         AND created_at > NOW() - INTERVAL '15 minutes'`,
+      [user.mobile, user.id]
+    );
+
+    if (parseInt(recentOtps.rows[0].count) >= config.rateLimit.otpMax) {
+      return res.status(429).json({ error: 'Too many reset requests. Please try again later.' });
+    }
+
+    // Generate OTP
+    const otp = generateOtp(config.otp.length);
+    const otpHash = await bcrypt.hash(otp, 10);
+    const expiresAt = new Date(Date.now() + config.otp.expiresInMinutes * 60000);
+
+    // Store OTP
+    await pool.query(
+      `INSERT INTO otp_logs (mobile, user_id, otp_hash, otp_type, expires_at)
+       VALUES ($1, $2, $3, 'password_reset', $4)`,
+      [user.mobile, user.id, otpHash, expiresAt]
+    );
+
+    // TODO: Send OTP via SMS/email in production
+    if (config.server.env === 'development') {
+      console.log(`\n🔑 Password Reset OTP for ${trimmed}: ${otp}\n`);
+    }
+
+    res.json({
+      success: true,
+      message: 'If an account exists with this mobile/email, an OTP has been sent.',
+      expiresIn: config.otp.expiresInMinutes * 60,
+      // Only include OTP in development for testing
+      ...(config.server.env === 'development' && { _devOtp: otp }),
+    });
+  } catch (err) {
+    console.error('Forgot password error:', err.message);
+    res.status(500).json({ error: 'Failed to process password reset request' });
+  }
+});
+
+// ─── POST /api/auth/verify-reset-otp ────────────────────────
+// Verify OTP and issue a short-lived password-reset token
+router.post('/verify-reset-otp', async (req, res) => {
+  try {
+    const { identifier, otp } = req.body;
+
+    if (!identifier || !otp) {
+      return res.status(400).json({ error: 'Mobile/email and OTP are required' });
+    }
+
+    const trimmed = identifier.trim();
+
+    // Find user
+    const userResult = await pool.query(
+      `SELECT id, mobile FROM users
+       WHERE (mobile = $1 OR email = $1) AND deleted_at IS NULL
+       LIMIT 1`,
+      [trimmed]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid OTP or account not found' });
+    }
+
+    const user = userResult.rows[0];
+
+    // Find latest unused reset OTP for this user
+    const otpResult = await pool.query(
+      `SELECT * FROM otp_logs
+       WHERE user_id = $1 AND otp_type = 'password_reset' AND verified_at IS NULL
+       ORDER BY created_at DESC LIMIT 1`,
+      [user.id]
+    );
+
+    if (otpResult.rows.length === 0) {
+      return res.status(400).json({ error: 'No OTP found. Please request a new one.' });
+    }
+
+    const otpRecord = otpResult.rows[0];
+
+    // Check expiry
+    if (new Date() > new Date(otpRecord.expires_at)) {
+      return res.status(400).json({ error: 'OTP has expired. Please request a new one.' });
+    }
+
+    // Check attempts
+    if (otpRecord.attempts >= (otpRecord.max_attempts || config.otp.maxAttempts)) {
+      return res.status(400).json({ error: 'Too many failed attempts. Please request a new OTP.' });
+    }
+
+    // Verify OTP
+    const isValid = await bcrypt.compare(otp, otpRecord.otp_hash);
+
+    if (!isValid) {
+      await pool.query(
+        'UPDATE otp_logs SET attempts = attempts + 1 WHERE id = $1',
+        [otpRecord.id]
+      );
+      return res.status(400).json({ error: 'Invalid OTP. Please try again.' });
+    }
+
+    // Mark OTP as verified
+    await pool.query(
+      'UPDATE otp_logs SET verified_at = NOW() WHERE id = $1',
+      [otpRecord.id]
+    );
+
+    // Issue a short-lived reset token (10 minutes)
+    const resetToken = jwt.sign(
+      { userId: user.id, purpose: 'password_reset' },
+      config.jwt.accessSecret,
+      { expiresIn: '10m' }
+    );
+
+    res.json({
+      success: true,
+      message: 'OTP verified successfully',
+      resetToken,
+    });
+  } catch (err) {
+    console.error('Verify reset OTP error:', err.message);
+    res.status(500).json({ error: 'OTP verification failed' });
+  }
+});
+
+// ─── POST /api/auth/reset-password ──────────────────────────
+// Reset password using a valid reset token
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { resetToken, newPassword, confirmPassword } = req.body;
+
+    if (!resetToken || !newPassword || !confirmPassword) {
+      return res.status(400).json({ error: 'Reset token, new password, and confirmation are required' });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ error: 'Passwords do not match' });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+
+    // Verify the reset token
+    let decoded;
+    try {
+      decoded = jwt.verify(resetToken, config.jwt.accessSecret);
+    } catch (tokenErr) {
+      if (tokenErr.name === 'TokenExpiredError') {
+        return res.status(400).json({ error: 'Reset link has expired. Please request a new one.' });
+      }
+      return res.status(400).json({ error: 'Invalid reset token' });
+    }
+
+    if (decoded.purpose !== 'password_reset') {
+      return res.status(400).json({ error: 'Invalid reset token' });
+    }
+
+    // Hash new password
+    const newHash = await bcrypt.hash(newPassword, 12);
+
+    // Update password
+    const updateResult = await pool.query(
+      'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2 AND deleted_at IS NULL RETURNING id',
+      [newHash, decoded.userId]
+    );
+
+    if (updateResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Invalidate all existing sessions
+    await pool.query('DELETE FROM user_sessions WHERE user_id = $1', [decoded.userId]);
+
+    // Audit log
+    await pool.query(
+      `INSERT INTO audit_logs (user_id, action, resource, ip_address)
+       VALUES ($1, 'password_reset', 'auth', $2)`,
+      [decoded.userId, req.ip]
+    ).catch(() => {}); // Non-fatal
+
+    res.json({ success: true, message: 'Password reset successfully. Please log in with your new password.' });
+  } catch (err) {
+    console.error('Reset password error:', err.message);
+    res.status(500).json({ error: 'Password reset failed' });
+  }
+});
+
 export default router;

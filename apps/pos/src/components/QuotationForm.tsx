@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import api from '@/lib/api';
+import { useAuthStore } from '@/store/auth-store';
+import { Loader2, RefreshCw, FileText, Download, CheckCircle2 } from 'lucide-react';
 
 /* ── Colour tokens matching the REON brand ──────────────────────────────── */
 const C = {
@@ -23,7 +25,7 @@ const STEPS = [
   { id: 'system',    label: 'PV System' },
   { id: 'pricing',   label: 'Pricing' },
   { id: 'payment',   label: 'Payment' },
-  { id: 'review',    label: 'Review & Generate' },
+  { id: 'review',    label: 'Review' },
 ];
 
 /* ── Initial form state ───────────────────────────────────────────────────── */
@@ -63,19 +65,28 @@ const INIT = {
   quotation_no_seq:     '',
 };
 
-/* ── Reusable field component ──────────────────────────────────────── */
+/* ── Reusable field component (Mobile-Responsive, 16px to prevent iOS autozoom) ─ */
 function Field({ label, name, value, onChange, type = 'text', required = false,
                  options, hint, half, readOnly, warn }: any) {
   const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '9px 12px', border: `1.5px solid ${warn ? C.red : C.border}`,
-    borderRadius: 7, fontSize: 13, outline: 'none', fontFamily: 'inherit',
-    background: readOnly ? C.light : 'white', color: C.text, boxSizing: 'border-box',
-    transition: 'border-color .15s', cursor: readOnly ? 'default' : 'text',
+    width: '100%',
+    padding: '11px 13px',
+    border: `1.5px solid ${warn ? C.red : C.border}`,
+    borderRadius: 8,
+    fontSize: 16, // Critical: 16px prevents iOS Safari/Chrome automatic viewport zooming
+    outline: 'none',
+    fontFamily: 'inherit',
+    background: readOnly ? C.light : '#FFFFFF',
+    color: C.text,
+    boxSizing: 'border-box',
+    transition: 'border-color .15s',
+    cursor: readOnly ? 'default' : 'text',
+    WebkitAppearance: 'none',
   };
-  const labelStyle = { fontSize: 12, fontWeight: 600, color: C.teal, display: 'block', marginBottom: 4 };
+  const labelStyle = { fontSize: 13, fontWeight: 600, color: C.teal, display: 'block', marginBottom: 5 };
 
   return (
-    <div style={{ flex: half ? '0 0 calc(50% - 6px)' : '1 1 100%', minWidth: 0 }}>
+    <div className={half ? 'w-full sm:w-[calc(50%-6px)]' : 'w-full'} style={{ minWidth: 0 }}>
       <label style={labelStyle}>{label}{required && <span style={{ color: C.orange }}> *</span>}</label>
       {options ? (
         <select name={name} value={value} onChange={onChange} style={inputStyle}
@@ -91,7 +102,7 @@ function Field({ label, name, value, onChange, type = 'text', required = false,
                onFocus={e => { if (!readOnly) e.target.style.borderColor = C.teal; }}
                onBlur={e => e.target.style.borderColor = warn ? C.red : C.border} />
       )}
-      {warn && <div style={{ fontSize: 11, color: C.red, marginTop: 2 }}>{warn}</div>}
+      {warn && <div style={{ fontSize: 11, color: C.red, marginTop: 3 }}>{warn}</div>}
     </div>
   );
 }
@@ -100,7 +111,7 @@ function Field({ label, name, value, onChange, type = 'text', required = false,
 function SectionHead({ title }: { title: string }) {
   return (
     <div style={{ marginBottom: 14 }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: C.navy }}>{title}</div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>{title}</div>
       <div style={{ height: 2, background: C.teal, marginTop: 4, borderRadius: 1 }} />
     </div>
   );
@@ -110,9 +121,9 @@ function SectionHead({ title }: { title: string }) {
 function RRow({ label, value, bold }: any) {
   if (!value) return null;
   return (
-    <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, fontSize: 12.5, padding: '6px 0' }}>
-      <div style={{ width: '42%', color: C.teal, fontWeight: 600 }}>{label}</div>
-      <div style={{ flex: 1, color: bold ? C.navy : C.text, fontWeight: bold ? 700 : 400 }}>{value}</div>
+    <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, fontSize: 13, padding: '7px 0' }}>
+      <div style={{ width: '45%', color: C.teal, fontWeight: 600 }}>{label}</div>
+      <div style={{ flex: 1, color: bold ? C.navy : C.text, fontWeight: bold ? 700 : 400, wordBreak: 'break-word' }}>{value}</div>
     </div>
   );
 }
@@ -120,14 +131,14 @@ function RRow({ label, value, bold }: any) {
 /* ── Info card for pricing ────────────────────────────────────────────────── */
 function PriceCard({ label, value, accent }: any) {
   return (
-    <div style={{
-      flex: '1 1 calc(50% - 6px)', minWidth: 0,
+    <div className="w-full sm:w-[calc(50%-6px)]" style={{
+      minWidth: 0,
       background: accent ? C.navy : C.light,
       border: `1.5px solid ${accent ? C.navy : C.border}`,
       borderRadius: 8, padding: '12px 14px',
     }}>
       <div style={{ fontSize: 11, color: accent ? '#AABBDD' : C.mid, fontWeight: 600, marginBottom: 3 }}>{label}</div>
-      <div style={{ fontSize: accent ? 16 : 14, fontWeight: 700, color: accent ? 'white' : C.text }}>{value}</div>
+      <div style={{ fontSize: accent ? 17 : 15, fontWeight: 700, color: accent ? 'white' : C.text }}>{value}</div>
     </div>
   );
 }
@@ -135,17 +146,19 @@ function PriceCard({ label, value, accent }: any) {
 interface QuotationFormProps {
   editData?: any;
   onClearEdit?: () => void;
+  onSuccess?: (quote: any) => void;
 }
 
-export default function QuotationForm({ editData, onClearEdit }: QuotationFormProps) {
-  const [step,       setStep]       = useState(0);
-  const [form,       setForm]       = useState<any>(INIT);
-  const [loading,    setLoading]    = useState(false);
-  const [error,      setError]      = useState<string | null>(null);
-  const [successUrl, setSuccessUrl] = useState<string | null>(null);
-  const [financeSim, setFinanceSim] = useState<any>(null);
+export default function QuotationForm({ editData, onClearEdit, onSuccess }: QuotationFormProps) {
+  const { user, partner } = useAuthStore();
+  const [step,          setStep]          = useState(0);
+  const [form,          setForm]          = useState<any>(INIT);
+  const [loading,       setLoading]       = useState(false);
+  const [error,         setError]         = useState<string | null>(null);
+  const [successUrl,    setSuccessUrl]    = useState<string | null>(null);
+  const [financeSim,    setFinanceSim]    = useState<any>(null);
   const [financialYear, setFinancialYear] = useState('26-27');
-  const [seqLoading, setSeqLoading] = useState(false);
+  const [seqLoading,    setSeqLoading]    = useState(false);
 
   const fetchNextSeq = async () => {
     setSeqLoading(true);
@@ -159,8 +172,8 @@ export default function QuotationForm({ editData, onClearEdit }: QuotationFormPr
           setFinancialYear(res.data.financialYear);
         }
       }
-    } catch (err) {
-      console.error('Failed to fetch next quotation number', err);
+    } catch (err: any) {
+      console.warn('Could not auto-fetch sequence number:', err.message);
     } finally {
       setSeqLoading(false);
     }
@@ -226,17 +239,10 @@ export default function QuotationForm({ editData, onClearEdit }: QuotationFormPr
   const next = () => setStep(s => Math.min(s + 1, STEPS.length - 1));
   const back = () => setStep(s => Math.max(s - 1, 0));
 
-  const seqWarn = () => {
-    const v = form.quotation_no_seq;
-    if (!v) return '';
-    if (!/^\d{3}$/.test(v)) return 'Must be exactly 3 digits (e.g. 001, 042, 110)';
-    return '';
-  };
-
   const isValid = () => {
     if (step === 0) return form.customer_name.trim().length > 0;
     if (step === 2) return form.system_capacity_kw.trim().length > 0 && kW > 0;
-    if (step === 3) return baseNum > 0;   // capacity + rate must yield a price
+    if (step === 3) return baseNum > 0;
     if (step === 4) {
       if (form.payment_mode === 'EMI / Loan') return financeSim !== null;
       return true;
@@ -264,12 +270,18 @@ export default function QuotationForm({ editData, onClearEdit }: QuotationFormPr
         total_price:       fmt(totalNum),
         totalCost:         fmt(totalNum),
         financeParameters: form.payment_mode === 'EMI / Loan' && financeSim ? financeSim : null,
+        // Carry POS partner details
+        pos_name:          partner?.shopName || user?.fullName || 'POS Partner',
+        pos_id:            partner?.referralCode || partner?.id || null,
+        partner_id:        partner?.id || null,
+        created_by_type:   'pos',
       };
 
       const response = await api.post('/quotations', payload);
       const data = response.data;
       if (data.success && data.pdfUrl) {
         setSuccessUrl(data.pdfUrl);
+        if (onSuccess) onSuccess(data.quotation || payload);
       } else {
         throw new Error('No PDF URL returned in response');
       }
@@ -280,11 +292,12 @@ export default function QuotationForm({ editData, onClearEdit }: QuotationFormPr
     }
   };
 
-  /* ── Pill progress bar ───────────────────────────────────────────────────── */
+  /* ── Pill progress bar (Mobile-friendly horizontal scroll) ───────────────── */
   const ProgressBar = () => (
-    <div style={{ display: 'flex', gap: 4, marginBottom: 24 }}>
+    <div className="flex gap-1.5 sm:gap-2 mb-5 overflow-x-auto pb-1 scrollbar-none">
       {STEPS.map((s, i) => (
-        <div key={s.id} style={{ flex: 1, cursor: i < step ? 'pointer' : 'default' }}
+        <div key={s.id}
+             className="flex-1 min-w-[50px] sm:min-w-[65px] cursor-pointer"
              onClick={() => i < step && setStep(i)}>
           <div style={{
             height: 4, borderRadius: 4,
@@ -292,8 +305,9 @@ export default function QuotationForm({ editData, onClearEdit }: QuotationFormPr
             transition: 'background .3s',
           }} />
           <div style={{
-            fontSize: 9.5, marginTop: 4, textAlign: 'center', fontWeight: 600,
+            fontSize: 10.5, marginTop: 4, textAlign: 'center', fontWeight: 600,
             color: i === step ? C.navy : i < step ? C.teal : C.mid,
+            whiteSpace: 'nowrap',
           }}>{s.label}</div>
         </div>
       ))}
@@ -308,7 +322,7 @@ export default function QuotationForm({ editData, onClearEdit }: QuotationFormPr
       case 0: return (
         <>
           <SectionHead title="Customer Details" />
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+          <div className="flex flex-wrap gap-3">
             <Field label="Customer Name" name="customer_name" value={form.customer_name}
                    onChange={update} required hint="Full name or company name" />
             <Field label="Address" name="address" value={form.address}
@@ -327,7 +341,7 @@ export default function QuotationForm({ editData, onClearEdit }: QuotationFormPr
       case 1: return (
         <>
           <SectionHead title="Solar Project Scope" />
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+          <div className="flex flex-wrap gap-3">
             <Field label="Project Category" name="project_category" value={form.project_category}
                    onChange={update} required half
                    options={['Residential', 'Commercial', 'Industrial', 'Agricultural']} />
@@ -345,7 +359,7 @@ export default function QuotationForm({ editData, onClearEdit }: QuotationFormPr
             <Field label="Electricity Provider (DISCOM)" name="electricity_provider" value={form.electricity_provider}
                    onChange={update} required half
                    options={['WBSEDCL', 'CESC', 'MSEDCL', 'TNEB', 'UPPCL', 'BESCOM', 'Other']} />
-            <Field label="Average Monthly Bill" name="monthly_bill" type="number"
+            <Field label="Average Monthly Bill (₹)" name="monthly_bill" type="number"
                    value={form.monthly_bill} onChange={update} hint="e.g. 5000" half />
             <Field label="Target Power Factor" name="power_factor" type="text"
                    value={form.power_factor} onChange={update} hint="e.g. 0.95 or N/A" half />
@@ -357,7 +371,7 @@ export default function QuotationForm({ editData, onClearEdit }: QuotationFormPr
       case 2: return (
         <>
           <SectionHead title="Technical Specifications" />
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+          <div className="flex flex-wrap gap-3">
             <Field label="System Capacity (kW) *" name="system_capacity_kw" type="number"
                    value={form.system_capacity_kw} onChange={update} required half hint="e.g. 5" />
             <Field label="Solar Panel Rating (Wp) *" name="panel_watt" type="number"
@@ -402,12 +416,12 @@ export default function QuotationForm({ editData, onClearEdit }: QuotationFormPr
       case 3: return (
         <>
           <SectionHead title="Pricing & Calculations" />
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
+          <div className="flex flex-wrap gap-3 mb-4">
             <Field label="Rate per Watt (₹/W) *" name="rate_per_watt" type="number"
                    value={form.rate_per_watt} onChange={update} required hint="e.g. 52" />
           </div>
           
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+          <div className="flex flex-wrap gap-3">
             <PriceCard label="Base Price (excl. GST)" value={kW > 0 && rate > 0 ? fmtRs(baseNum) : '—'} />
             <PriceCard label="GST Amount (5%)" value={kW > 0 && rate > 0 ? fmtRs(gstNum) : '—'} />
             <PriceCard label="Estimated Panels Required" value={panelCount > 0 ? `${panelCount} Nos. (${panelWatt}Wp)` : '—'} />
@@ -420,20 +434,20 @@ export default function QuotationForm({ editData, onClearEdit }: QuotationFormPr
       case 4: return (
         <>
           <SectionHead title="Payment Terms & EMI Simulator" />
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
+          <div className="flex flex-wrap gap-3 mb-4">
             <Field label="Payment Mode" name="payment_mode" value={form.payment_mode}
                    onChange={update} required half
                    options={['Cash', 'Bank Transfer (NEFT/RTGS)', 'Cheque', 'EMI / Loan']} />
           </div>
 
           {form.payment_mode === 'EMI / Loan' && (
-            <div style={{ background: '#F8FAFC', borderRadius: 8, padding: 16, border: `1px solid ${C.border}` }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ background: '#F8FAFC', borderRadius: 8, padding: 14, border: `1px solid ${C.border}` }}>
+              <div className="flex flex-wrap gap-3">
                 <Field label="Loan Down Payment (₹)" name="emi_down_payment" type="number" half
                        value={form.emi_down_payment} onChange={update} hint="e.g. 50000" />
-                <div style={{ flex: '0 0 calc(50% - 6px)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <span style={{ fontSize: 11, color: C.mid, fontWeight: 600, marginBottom: 4 }}>Financed Loan Amount</span>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>
+                <div className="w-full sm:w-[calc(50%-6px)] flex flex-col justify-center">
+                  <span style={{ fontSize: 12, color: C.mid, fontWeight: 600, marginBottom: 4 }}>Financed Loan Amount</span>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: C.navy }}>
                     {totalNum > 0
                       ? fmtRs(totalNum - (parseFloat(form.emi_down_payment) || 0))
                       : '—'}
@@ -446,36 +460,30 @@ export default function QuotationForm({ editData, onClearEdit }: QuotationFormPr
               </div>
 
               {financeSim && (
-                <div style={{ marginTop: 16, borderTop: `2px dashed ${C.border}`, paddingTop: 14 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: C.teal, marginBottom: 10 }}>
+                <div style={{ marginTop: 14, borderTop: `2px dashed ${C.border}`, paddingTop: 12 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.teal, marginBottom: 10 }}>
                     📈 EMI Calculation Results
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {[
                       { l: 'Down Payment',        v: fmtRs(financeSim.downPayment),    hi: false },
                       { l: 'Loan Amount',          v: fmtRs(financeSim.loanAmount),    hi: false },
                       { l: 'Rate of Interest',     v: `${financeSim.interestRate}% p.a.`, hi: false },
                       { l: 'Tenure',               v: `${financeSim.tenure} Months`,   hi: false },
-                      { l: '📅 Monthly EMI',       v: fmtRs(financeSim.emiAmount),     hi: true  },
-                      { l: '💰 Total Interest',    v: fmtRs(financeSim.totalInterest), hi: false },
-                      { l: '🧾 Total Payable',     v: fmtRs(financeSim.totalPayable),  hi: true  },
+                      { l: 'Monthly EMI',          v: fmtRs(financeSim.emiAmount),     hi: true  },
+                      { l: 'Total Interest',       v: fmtRs(financeSim.totalInterest), hi: false },
+                      { l: 'Total Payable',        v: fmtRs(financeSim.totalPayable),  hi: true  },
                     ].map(({ l, v, hi }) => (
                       <div key={l} style={{
                         padding: '10px 12px', borderRadius: 7,
                         background: hi ? C.navy : 'white',
                         border: `1.5px solid ${hi ? C.navy : C.border}`,
                       }}>
-                        <div style={{ fontSize: 10.5, color: hi ? '#AABBDD' : C.mid, marginBottom: 2 }}>{l}</div>
-                        <div style={{ fontSize: hi ? 15 : 13, fontWeight: 700, color: hi ? 'white' : C.text }}>{v}</div>
+                        <div style={{ fontSize: 11, color: hi ? '#AABBDD' : C.mid, marginBottom: 2 }}>{l}</div>
+                        <div style={{ fontSize: hi ? 15 : 13.5, fontWeight: 700, color: hi ? 'white' : C.text }}>{v}</div>
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
-
-              {!financeSim && totalNum > 0 && (
-                <div style={{ marginTop: 12, fontSize: 12, color: C.mid, textAlign: 'center' }}>
-                  Enter down payment, rate of interest and tenure to calculate EMI.
                 </div>
               )}
             </div>
@@ -487,8 +495,8 @@ export default function QuotationForm({ editData, onClearEdit }: QuotationFormPr
       case 5: return (
         <>
           <SectionHead title="Quotation Numbering" />
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 8 }}>
-            <div style={{ flex: '0 0 calc(50% - 6px)', minWidth: 0 }}>
+          <div className="flex flex-wrap gap-3 mb-4">
+            <div className="w-full sm:w-[calc(50%-6px)]" style={{ minWidth: 0 }}>
               <label style={{ fontSize: 12, fontWeight: 600, color: C.teal, display: 'block', marginBottom: 4 }}>
                 Quotation Sequence No (Auto-Generated)
               </label>
@@ -499,9 +507,9 @@ export default function QuotationForm({ editData, onClearEdit }: QuotationFormPr
                   onChange={update}
                   type="text"
                   style={{
-                    flex: 1, padding: '9px 12px', border: `1.5px solid ${C.border}`,
-                    borderRadius: 7, fontSize: 13, outline: 'none', background: C.light,
-                    color: C.navy, fontWeight: 600
+                    flex: 1, padding: '10px 12px', border: `1.5px solid ${C.border}`,
+                    borderRadius: 7, fontSize: 16, outline: 'none', background: C.light,
+                    color: C.navy, fontWeight: 700
                   }}
                   placeholder="Auto-fetching..."
                 />
@@ -510,74 +518,75 @@ export default function QuotationForm({ editData, onClearEdit }: QuotationFormPr
                   onClick={fetchNextSeq}
                   disabled={seqLoading}
                   style={{
-                    padding: '9px 14px', background: C.teal, color: 'white', border: 'none',
-                    borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer'
+                    padding: '10px 14px', background: C.teal, color: 'white', border: 'none',
+                    borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 4
                   }}
                 >
-                  {seqLoading ? '...' : 'Refresh'}
+                  {seqLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                  <span>{seqLoading ? '...' : 'Refresh'}</span>
                 </button>
               </div>
-              <div style={{ fontSize: 10.5, color: C.teal, marginTop: 4 }}>
-                ✓ Auto-checked from database for FY {financialYear}
+              <div style={{ fontSize: 11, color: C.teal, marginTop: 4 }}>
+                ✓ Database sequence for FY {financialYear}
               </div>
             </div>
-            <div style={{ flex: '0 0 calc(50% - 6px)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+
+            <div className="w-full sm:w-[calc(50%-6px)] flex flex-col justify-end">
               <div style={{
-                padding: '9px 14px', background: Boolean(form.quotation_no_seq) ? '#EBF9FB' : C.light,
+                padding: '10px 14px', background: Boolean(form.quotation_no_seq) ? '#EBF9FB' : C.light,
                 border: `1.5px solid ${Boolean(form.quotation_no_seq) ? C.teal : C.border}`,
-                borderRadius: 7, fontSize: 14, fontWeight: 700,
+                borderRadius: 7, fontSize: 15, fontWeight: 700,
                 color: Boolean(form.quotation_no_seq) ? C.navy : C.mid,
               }}>
                 {offerNo}
               </div>
-              <div style={{ fontSize: 10.5, color: C.mid, marginTop: 3 }}>
-                PDF will be saved as: <b>{offerNo.replace(/\//g, '-')}.pdf</b>
+              <div style={{ fontSize: 11, color: C.mid, marginTop: 3 }}>
+                PDF: <b>{offerNo.replace(/\//g, '-')}.pdf</b>
               </div>
             </div>
           </div>
 
-          <div style={{ height: 1, background: C.border, margin: '20px 0' }} />
+          <div style={{ height: 1, background: C.border, margin: '16px 0' }} />
           <SectionHead title="Review Summary" />
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.navy, marginBottom: 6 }}>CUSTOMER</div>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: C.navy, marginBottom: 6 }}>CUSTOMER & LOCATION</div>
               <RRow label="Name"       value={form.customer_name} />
               <RRow label="Address"    value={form.address} />
               <RRow label="Contact"    value={form.contact_number} />
+              <RRow label="State"      value={form.state} />
 
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.navy, marginTop: 12, marginBottom: 6 }}>SYSTEM</div>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: C.navy, marginTop: 12, marginBottom: 6 }}>PV SYSTEM SPECS</div>
               <RRow label="Capacity"   value={`${form.system_capacity_kw} kW`} bold />
               <RRow label="Panels"     value={`${panelCount} Nos. × ${panelWatt}Wp`} />
               <RRow label="Inverter"   value={form.inverter_type} />
               <RRow label="Invr. Brand" value={form.inverter_brand} />
-              {(form.battery_brand || (form.battery_voltage && form.battery_voltage !== 'N/A')) && (
-                 <RRow label="Battery" value={`${form.battery_brand} ${form.battery_voltage !== 'N/A' ? `(${form.battery_voltage})` : ''}`} />
-              )}
               <RRow label="DISCOM"     value={form.electricity_provider} />
             </div>
 
             <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.navy, marginBottom: 6 }}>PRICING</div>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: C.navy, marginBottom: 6 }}>PRICING</div>
               <RRow label="Rate/Watt"  value={`₹ ${form.rate_per_watt}/W`} />
               <RRow label="Base Price" value={`₹ ${fmt(baseNum)}`} />
               <RRow label="GST @ 5%"  value={`₹ ${fmt(gstNum)}`} />
               <div style={{
                 background: C.orange, borderRadius: 6, padding: '10px 14px', marginTop: 8,
-                display: 'flex', justifyContent: 'space-between',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
               }}>
-                <span style={{ color: 'white', fontWeight: 700, fontSize: 12 }}>Total (incl. GST)</span>
-                <span style={{ color: 'white', fontWeight: 800, fontSize: 14 }}>{fmtRs(totalNum)}</span>
+                <span style={{ color: 'white', fontWeight: 700, fontSize: 13 }}>Total (incl. GST)</span>
+                <span style={{ color: 'white', fontWeight: 800, fontSize: 16 }}>{fmtRs(totalNum)}</span>
               </div>
 
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.navy, marginTop: 12, marginBottom: 6 }}>PAYMENT</div>
-              <RRow label="Mode"       value={form.payment_mode} bold />
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: C.navy, marginTop: 12, marginBottom: 6 }}>GENERATED BY (POS)</div>
+              <RRow label="Partner"    value={partner?.shopName || user?.fullName || 'POS Partner'} bold />
+              <RRow label="POS ID"     value={partner?.referralCode || 'POS Partner'} />
+              <RRow label="Payment"    value={form.payment_mode} bold />
               {financeSim && (
                 <>
                   <RRow label="Loan Amount"   value={fmtRs(financeSim.loanAmount)} />
                   <RRow label="Monthly EMI"   value={fmtRs(financeSim.emiAmount)} bold />
-                  <RRow label="Total Interest" value={fmtRs(financeSim.totalInterest)} />
-                  <RRow label="Total Payable" value={fmtRs(financeSim.totalPayable)} bold />
                 </>
               )}
             </div>
@@ -591,24 +600,33 @@ export default function QuotationForm({ editData, onClearEdit }: QuotationFormPr
 
   /* ── Render ──────────────────────────────────────────────────────────────── */
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif', color: C.text, maxWidth: 820, margin: '0 auto' }}>
+    <div style={{ fontFamily: 'system-ui, sans-serif', color: C.text, maxWidth: 840, margin: '0 auto' }}>
 
       {/* Header */}
       <div style={{
-        background: C.navy, borderRadius: 10, padding: '14px 20px',
-        marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12,
+        background: C.navy, borderRadius: 10, padding: '12px 16px',
+        marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10,
       }}>
-        <div style={{ background: C.orange, borderRadius: 6, padding: '4px 12px', fontWeight: 700, color: 'white', fontSize: 14 }}>
+        <div style={{ background: C.orange, borderRadius: 6, padding: '4px 10px', fontWeight: 700, color: 'white', fontSize: 13 }}>
           REON
         </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ color: 'white', fontWeight: 700, fontSize: 15 }}>{editData ? 'Edit Solar Quotation' : 'Dynamic Solar Quotation Builder'}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="truncate" style={{ color: 'white', fontWeight: 700, fontSize: 14.5 }}>
+            {editData ? 'Edit Solar Quotation' : 'Dynamic Solar Quotation Builder'}
+          </div>
           <div style={{ color: '#AABBDD', fontSize: 11 }}>
-            Auto-pricing engine · EMI calculator · PDF generator
+            Auto-pricing · EMI calculator · PDF generator
           </div>
         </div>
+        {partner?.shopName && (
+          <div className="hidden sm:block text-right">
+            <span className="text-[10.5px] text-emerald-300 font-semibold bg-white/10 px-2 py-0.5 rounded">
+              {partner.shopName}
+            </span>
+          </div>
+        )}
         {editData && (
-          <button onClick={onClearEdit} style={{ background: 'rgba(255,255,255,0.1)', color: 'white', border: '1px solid rgba(255,255,255,0.2)', padding: '6px 12px', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>Cancel Edit</button>
+          <button onClick={onClearEdit} style={{ background: 'rgba(255,255,255,0.1)', color: 'white', border: '1px solid rgba(255,255,255,0.2)', padding: '5px 10px', borderRadius: 6, fontSize: 11.5, cursor: 'pointer', fontWeight: 600 }}>Cancel</button>
         )}
       </div>
 
@@ -616,47 +634,82 @@ export default function QuotationForm({ editData, onClearEdit }: QuotationFormPr
       <ProgressBar />
 
       {/* Card */}
-      <div style={{ background: 'white', border: `1.5px solid ${C.border}`, borderRadius: 12, padding: '24px 28px', minHeight: 320 }}>
+      <div className="bg-white border border-[#D8DDE8] rounded-xl p-4 sm:p-7 min-h-[320px] shadow-xs">
         {stepContent()}
       </div>
 
       {/* Error */}
       {error && (
-        <div style={{ marginTop: 12, padding: '10px 14px', background: '#FEE', border: '1px solid #F99', borderRadius: 6, color: '#c00', fontSize: 12.5 }}>
+        <div style={{ marginTop: 12, padding: '10px 14px', background: '#FEE', border: '1px solid #F99', borderRadius: 7, color: '#c00', fontSize: 13 }}>
           ⚠ {error}
         </div>
       )}
 
       {/* Navigation */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 18, gap: 10 }}>
+      <div className="flex flex-wrap items-center justify-between mt-4 gap-3">
         {successUrl ? (
-          <>
-            <button onClick={() => { setStep(0); setForm(INIT); setFinanceSim(null); setSuccessUrl(null); }}
-                    style={{ padding: '10px 24px', border: `1.5px solid ${C.border}`, borderRadius: 8, background: 'white', color: C.text, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
-              Create Another
-            </button>
-            <a href={successUrl} target="_blank" rel="noreferrer"
-               download
-               style={{ padding: '10px 32px', border: 'none', borderRadius: 8, background: C.green, color: 'white', textDecoration: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'inline-block' }}>
-              ⬇ Download PDF
-            </a>
-          </>
+          <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+            <div className="flex items-center gap-2 text-emerald-800 font-semibold text-sm">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+              <span>Quotation generated and saved to database successfully!</span>
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                onClick={() => { setStep(0); setForm(INIT); setFinanceSim(null); setSuccessUrl(null); fetchNextSeq(); }}
+                className="flex-1 sm:flex-none px-4 py-2 border border-emerald-300 rounded-lg bg-white text-emerald-900 font-medium text-xs hover:bg-emerald-50 transition-colors"
+              >
+                Create Another
+              </button>
+              <a
+                href={successUrl}
+                target="_blank"
+                rel="noreferrer"
+                download
+                className="flex-1 sm:flex-none px-5 py-2 rounded-lg bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 transition-colors inline-flex items-center justify-center gap-1.5 shadow-sm"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Download PDF
+              </a>
+            </div>
+          </div>
         ) : (
           <>
-            <button onClick={back} disabled={step === 0 || loading}
-                    style={{ padding: '10px 24px', border: `1.5px solid ${C.border}`, borderRadius: 8, background: 'white', color: C.text, fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: step === 0 ? 0.4 : 1 }}>
+            <button
+              onClick={back}
+              disabled={step === 0 || loading}
+              className="px-5 py-2.5 border border-[#D8DDE8] rounded-lg bg-white text-[#1A1A2E] font-semibold text-xs disabled:opacity-40 hover:bg-gray-50 transition-colors"
+            >
               ← Back
             </button>
 
             {step < STEPS.length - 1 ? (
-              <button onClick={next} disabled={!isValid()}
-                      style={{ padding: '10px 28px', border: 'none', borderRadius: 8, background: isValid() ? C.navy : C.border, color: 'white', fontWeight: 700, fontSize: 13, cursor: isValid() ? 'pointer' : 'not-allowed', transition: 'background .2s' }}>
+              <button
+                onClick={next}
+                disabled={!isValid()}
+                style={{
+                  padding: '10px 24px', border: 'none', borderRadius: 8,
+                  background: isValid() ? C.navy : C.border,
+                  color: 'white', fontWeight: 700, fontSize: 13,
+                  cursor: isValid() ? 'pointer' : 'not-allowed',
+                  transition: 'background .2s'
+                }}
+              >
                 Next →
               </button>
             ) : (
-              <button onClick={handleSubmit} disabled={loading || !isValid()}
-                      style={{ padding: '10px 32px', border: 'none', borderRadius: 8, background: C.orange, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: loading ? 0.7 : 1 }}>
-                {loading ? '⏳ Generating…' : '📄 Generate Quotation PDF'}
+              <button
+                onClick={handleSubmit}
+                disabled={loading || !isValid()}
+                style={{
+                  padding: '11px 28px', border: 'none', borderRadius: 8,
+                  background: C.orange, color: 'white', fontWeight: 700, fontSize: 13.5,
+                  cursor: (loading || !isValid()) ? 'not-allowed' : 'pointer',
+                  opacity: loading ? 0.7 : 1,
+                  display: 'flex', alignItems: 'center', gap: 6
+                }}
+              >
+                {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                <span>{loading ? 'Generating PDF…' : '📄 Generate Quotation PDF'}</span>
               </button>
             )}
           </>

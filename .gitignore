@@ -26,6 +26,8 @@ dist-ssr
 server/pdfs/
 server/temp/
 __pycache__/
+*.pyc
+*.tsbuildinfo
 *.pdf
 .next
 .next/

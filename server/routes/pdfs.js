@@ -64,9 +64,17 @@ router.get('/:filename', async (req, res, next) => {
       }
       
       const q = result.rows[0];
+
+      // If binary PDF data is stored in the database, restore and serve it immediately!
+      if (q.pdf_data) {
+        console.log(`[PDF] Restoring Quotation directly from DB pdf_data: ${filename}`);
+        fs.writeFileSync(filePath, Buffer.from(q.pdf_data, 'base64'));
+        return res.sendFile(filePath);
+      }
+
       const payload = typeof q.raw_data === 'string' ? JSON.parse(q.raw_data) : q.raw_data;
 
-      console.log(`[PDF] Auto-regenerating missing Quotation: ${filename}`);
+      console.log(`[PDF] Auto-regenerating missing Quotation via Python: ${filename}`);
       await execFileAsync(runPythonCommand, [QUOTATION_SCRIPT, '--output', filePath], {
         env: { ...process.env, REON_QUOTE_JSON: JSON.stringify(payload) },
         timeout: 60000,

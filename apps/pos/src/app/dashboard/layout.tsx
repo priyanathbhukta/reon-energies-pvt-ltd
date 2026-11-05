@@ -39,6 +39,130 @@ const navItems = [
   { label: 'Settings', href: '/dashboard/settings', icon: Settings },
 ];
 
+interface SidebarContentProps {
+  sidebarCollapsed: boolean;
+  pathname: string;
+  user: any;
+  partner: any;
+  logout: () => Promise<void>;
+  router: any;
+  isMobile?: boolean;
+  onItemClick?: () => void;
+}
+
+function SidebarContent({
+  sidebarCollapsed,
+  pathname,
+  user,
+  partner,
+  logout,
+  router,
+  isMobile = false,
+  onItemClick,
+}: SidebarContentProps) {
+  return (
+    <>
+      {/* Logo */}
+      <div className="h-16 flex items-center px-4 border-b border-sidebar-border">
+        <Link href="/dashboard" onClick={onItemClick} className="flex items-center gap-3 group">
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-emerald-500/20 group-hover:shadow-emerald-500/40 transition-shadow">
+            <Zap className="w-5 h-5 text-white" />
+          </div>
+          <AnimatePresence>
+            {(!sidebarCollapsed || isMobile) && (
+              <motion.div
+                initial={{ opacity: 0, width: 0 }}
+                animate={{ opacity: 1, width: 'auto' }}
+                exit={{ opacity: 0, width: 0 }}
+                className="overflow-hidden whitespace-nowrap"
+              >
+                <span className="text-lg font-bold text-sidebar-foreground font-display tracking-tight">
+                  REON
+                </span>
+                <span className="text-emerald-400 text-xs font-medium block -mt-1 tracking-wider">
+                  POS PORTAL
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </Link>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
+        {navItems.map((item) => {
+          const isActive =
+            pathname === item.href ||
+            (item.href !== '/dashboard' && pathname?.startsWith(item.href));
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={onItemClick}
+              className={cn(
+                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative',
+                isActive
+                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                  : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
+              )}
+            >
+              {isActive && (
+                <div
+                  className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full bg-emerald-500"
+                />
+              )}
+              <item.icon
+                className={cn(
+                  'w-5 h-5 flex-shrink-0 transition-colors',
+                  isActive ? 'text-emerald-400' : 'group-hover:text-emerald-400/70'
+                )}
+              />
+              {(!sidebarCollapsed || isMobile) && (
+                <span className="overflow-hidden whitespace-nowrap">
+                  {item.label}
+                </span>
+              )}
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* User card at bottom */}
+      <div className="p-3 border-t border-sidebar-border">
+        <div
+          className={cn(
+            'flex items-center gap-3 p-2 rounded-lg',
+            sidebarCollapsed && !isMobile ? 'justify-center' : ''
+          )}
+        >
+          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500 to-solar-500 flex items-center justify-center flex-shrink-0 text-sm font-bold text-white">
+            {user?.fullName ? getInitials(user.fullName) : 'U'}
+          </div>
+          {(!sidebarCollapsed || isMobile) && (
+            <div className="flex-1 min-w-0 overflow-hidden">
+              <p className="text-sm font-medium text-sidebar-foreground truncate">
+                {user?.fullName || 'Partner'}
+              </p>
+              <p className="text-xs text-sidebar-foreground/50 truncate">
+                {partner?.shopName || 'POS Partner'}
+              </p>
+            </div>
+          )}
+          {(!sidebarCollapsed || isMobile) && (
+            <button
+              onClick={async () => { if (onItemClick) onItemClick(); await logout(); router.push('/login'); }}
+              className="p-1.5 rounded-md text-sidebar-foreground/40 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+              title="Sign out"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function DashboardLayout({
   children,
 }: {
@@ -89,123 +213,6 @@ export default function DashboardLayout({
     );
   }
 
-  const SidebarContent = () => (
-    <>
-      {/* Logo */}
-      <div className="h-16 flex items-center px-4 border-b border-sidebar-border">
-        <Link href="/dashboard" className="flex items-center gap-3 group">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-emerald-500/20 group-hover:shadow-emerald-500/40 transition-shadow">
-            <Zap className="w-5 h-5 text-white" />
-          </div>
-          <AnimatePresence>
-            {!sidebarCollapsed && (
-              <motion.div
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: 'auto' }}
-                exit={{ opacity: 0, width: 0 }}
-                className="overflow-hidden whitespace-nowrap"
-              >
-                <span className="text-lg font-bold text-sidebar-foreground font-display tracking-tight">
-                  REON
-                </span>
-                <span className="text-emerald-400 text-xs font-medium block -mt-1 tracking-wider">
-                  POS PORTAL
-                </span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </Link>
-      </div>
-
-      {/* Navigation */}
-      <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
-          const isActive =
-            pathname === item.href ||
-            (item.href !== '/dashboard' && pathname?.startsWith(item.href));
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative',
-                isActive
-                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                  : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
-              )}
-            >
-              {isActive && (
-                <motion.div
-                  layoutId="sidebar-active"
-                  className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full bg-emerald-500"
-                  transition={{ type: 'spring', stiffness: 350, damping: 30 }}
-                />
-              )}
-              <item.icon
-                className={cn(
-                  'w-5 h-5 flex-shrink-0 transition-colors',
-                  isActive ? 'text-emerald-400' : 'group-hover:text-emerald-400/70'
-                )}
-              />
-              <AnimatePresence>
-                {!sidebarCollapsed && (
-                  <motion.span
-                    initial={{ opacity: 0, width: 0 }}
-                    animate={{ opacity: 1, width: 'auto' }}
-                    exit={{ opacity: 0, width: 0 }}
-                    className="overflow-hidden whitespace-nowrap"
-                  >
-                    {item.label}
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </Link>
-          );
-        })}
-      </nav>
-
-      {/* User card at bottom */}
-      <div className="p-3 border-t border-sidebar-border">
-        <div
-          className={cn(
-            'flex items-center gap-3 p-2 rounded-lg',
-            sidebarCollapsed ? 'justify-center' : ''
-          )}
-        >
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500 to-solar-500 flex items-center justify-center flex-shrink-0 text-sm font-bold text-white">
-            {user?.fullName ? getInitials(user.fullName) : 'U'}
-          </div>
-          <AnimatePresence>
-            {!sidebarCollapsed && (
-              <motion.div
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: 'auto' }}
-                exit={{ opacity: 0, width: 0 }}
-                className="flex-1 min-w-0 overflow-hidden"
-              >
-                <p className="text-sm font-medium text-sidebar-foreground truncate">
-                  {user?.fullName || 'Partner'}
-                </p>
-                <p className="text-xs text-sidebar-foreground/50 truncate">
-                  {partner?.shopName || 'POS Partner'}
-                </p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          {!sidebarCollapsed && (
-            <button
-              onClick={async () => { await logout(); router.push('/login'); }}
-              className="p-1.5 rounded-md text-sidebar-foreground/40 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-              title="Sign out"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      </div>
-    </>
-  );
-
   return (
     <div className="min-h-screen bg-background flex">
       {/* Desktop Sidebar */}
@@ -215,7 +222,15 @@ export default function DashboardLayout({
           sidebarCollapsed ? 'w-[72px]' : 'w-64'
         )}
       >
-        <SidebarContent />
+        <SidebarContent
+          sidebarCollapsed={sidebarCollapsed}
+          pathname={pathname}
+          user={user}
+          partner={partner}
+          logout={logout}
+          router={router}
+          isMobile={false}
+        />
 
         {/* Collapse button */}
         <button
@@ -247,9 +262,18 @@ export default function DashboardLayout({
               animate={{ x: 0 }}
               exit={{ x: -280 }}
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="fixed inset-y-0 left-0 z-50 w-64 bg-sidebar flex flex-col lg:hidden"
+              className="fixed inset-y-0 left-0 z-50 w-64 bg-sidebar flex flex-col lg:hidden shadow-2xl"
             >
-              <SidebarContent />
+              <SidebarContent
+                sidebarCollapsed={false}
+                pathname={pathname}
+                user={user}
+                partner={partner}
+                logout={logout}
+                router={router}
+                isMobile={true}
+                onItemClick={() => setMobileMenuOpen(false)}
+              />
             </motion.aside>
           </>
         )}

@@ -112,6 +112,8 @@ app.use('/pdfs', pdfsRouter);
 app.use('/api/v2/auth', authController);
 app.use('/api/v2/pos', posController);
 app.use('/api/v2/leads', leadController);
+app.use('/api/v2/quotations', authenticate, adminQuotationsRouter);
+app.use('/api/quotations', authenticate, adminQuotationsRouter);
 
 // ─── Health Check ───────────────────────────────────────────
 app.get('/api/health', (req, res) => {
