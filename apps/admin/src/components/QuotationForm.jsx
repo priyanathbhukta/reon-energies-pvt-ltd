@@ -278,7 +278,9 @@ export default function QuotationForm({ editData, onClearEdit }) {
         body: JSON.stringify(payload),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to generate quotation');
+      if (!response.ok) {
+        throw new Error(data.details && !data.error?.includes(data.details) ? `${data.error} (${data.details})` : (data.error || 'Failed to generate quotation'));
+      }
       if (data.success && data.pdfUrl) {
         setSuccessUrl(data.pdfUrl);
       } else {

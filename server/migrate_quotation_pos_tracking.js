@@ -36,7 +36,8 @@ async function migrate() {
       ADD COLUMN IF NOT EXISTS created_by_type VARCHAR(50) DEFAULT 'admin',
       ADD COLUMN IF NOT EXISTS pdf_data TEXT,
       ADD COLUMN IF NOT EXISTS user_id UUID,
-      ADD COLUMN IF NOT EXISTS partner_id UUID;
+      ADD COLUMN IF NOT EXISTS partner_id UUID,
+      ADD COLUMN IF NOT EXISTS admin_id INTEGER;
     `);
 
     // 3. Set existing rows with NULL pos_name to 'admin'

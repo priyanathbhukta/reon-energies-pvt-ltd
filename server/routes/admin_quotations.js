@@ -141,10 +141,24 @@ router.post('/', async (req, res) => {
     let posName = 'admin';
     let posId = null;
     let partnerId = null;
-    let userId = req.user?.id || req.admin?.id || null;
+    let userId = null;
+    let adminId = null;
 
-    // Check if the caller is an authenticated POS partner via req.user
-    if (userId) {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    const rawUserId = req.user?.id || null;
+    const rawAdminId = req.admin?.id || null;
+
+    // Check if called by legacy admin (integer ID from admins table)
+    if (rawAdminId !== null && !isNaN(Number(rawAdminId))) {
+      adminId = parseInt(rawAdminId, 10);
+      createdByType = 'admin';
+      posName = 'admin';
+    }
+
+    // Check if the caller is an authenticated POS partner via req.user (UUID from users table)
+    if (rawUserId && uuidRegex.test(String(rawUserId))) {
+      userId = String(rawUserId);
       try {
         const partnerRes = await pool.query(
           'SELECT id, shop_name, referral_code FROM pos_partners WHERE user_id = $1',
@@ -170,8 +184,8 @@ router.post('/', async (req, res) => {
     if (data.pos_id && !posId) {
       posId = data.pos_id;
     }
-    if (data.partner_id && !partnerId) {
-      partnerId = data.partner_id;
+    if (data.partner_id && uuidRegex.test(String(data.partner_id))) {
+      partnerId = String(data.partner_id);
     }
 
     // 4. Save to Database
@@ -198,9 +212,9 @@ router.post('/', async (req, res) => {
         offer_no, customer_name, total_price, payment_mode,
         down_payment, loan_amount, interest_rate, tenure,
         emi_amount, total_interest, total_emi_paid, pdf_url, raw_data,
-        pos_name, pos_id, created_by_type, pdf_data, user_id, partner_id
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
-      RETURNING id, offer_no, customer_name, total_price, payment_mode, pdf_url, pos_name, pos_id, created_by_type, created_at;
+        pos_name, pos_id, created_by_type, pdf_data, user_id, partner_id, admin_id
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+      RETURNING id, offer_no, customer_name, total_price, payment_mode, pdf_url, pos_name, pos_id, created_by_type, admin_id, created_at;
     `;
     const values = [
       offerNo,
@@ -221,7 +235,8 @@ router.post('/', async (req, res) => {
       createdByType,
       pdfData,
       userId,
-      partnerId
+      partnerId,
+      adminId
     ];
 
     const result = await pool.query(query, values);
@@ -252,10 +267,10 @@ router.post('/', async (req, res) => {
       return res.status(500).json({ error: 'PDF generation timed out. Please try again.' });
     }
 
-    const pyError = error.stderr ? error.stderr.trim() : error.message;
+    const errorDetail = error.stderr ? error.stderr.trim() : error.message;
     res.status(500).json({
-      error: 'Failed to process quotation request',
-      details: pyError || error.message,
+      error: errorDetail ? `Failed to process quotation request: ${errorDetail}` : 'Failed to process quotation request',
+      details: errorDetail,
     });
   }
 });

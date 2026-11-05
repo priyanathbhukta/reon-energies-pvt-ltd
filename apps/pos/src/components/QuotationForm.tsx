@@ -286,7 +286,10 @@ export default function QuotationForm({ editData, onClearEdit, onSuccess }: Quot
         throw new Error('No PDF URL returned in response');
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message);
+      const errorMsg = err.response?.data?.details && !err.response?.data?.error?.includes(err.response?.data?.details)
+        ? `${err.response.data.error} (${err.response.data.details})`
+        : (err.response?.data?.error || err.message);
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
