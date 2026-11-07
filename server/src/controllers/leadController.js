@@ -25,15 +25,23 @@ router.get('/', authenticate, async (req, res) => {
 
     // POS partners only see their own leads
     if (!isAdmin) {
-      const partnerResult = await pool.query(
-        'SELECT id FROM pos_partners WHERE user_id = $1',
-        [req.user.id]
-      );
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const isValidUuid = typeof req.user.id === 'string' && uuidRegex.test(req.user.id);
+      
+      let partnerResult = { rows: [] };
+      if (isValidUuid) {
+        partnerResult = await pool.query(
+          'SELECT id, shop_name, referral_code FROM pos_partners WHERE user_id = $1',
+          [req.user.id]
+        );
+      }
       if (partnerResult.rows.length === 0) {
         return res.json({ leads: [], pagination: { total: 0, page: 1, limit: 20, totalPages: 0 } });
       }
-      query += ` AND l.partner_id = $${paramIdx++}`;
-      params.push(partnerResult.rows[0].id);
+      const partner = partnerResult.rows[0];
+      query += ` AND (l.partner_id = $${paramIdx} OR l.pos_name = $${paramIdx + 1} OR l.pos_id = $${paramIdx + 2})`;
+      params.push(partner.id, partner.shop_name, partner.referral_code);
+      paramIdx += 3;
     }
 
     if (stage) {
@@ -80,7 +88,22 @@ router.get('/', authenticate, async (req, res) => {
         source: r.source,
         stage: r.stage,
         priority: r.priority,
-        partnerShopName: r.partner_shop_name,
+        partnerShopName: r.partner_shop_name || r.pos_name,
+        posName: r.pos_name || r.partner_shop_name,
+        posId: r.pos_id,
+        quotationId: r.quotation_id,
+        quotationNumber: r.quotation_no,
+        quotationNo: r.quotation_no,
+        quotationAmount: parseFloat(r.quotation_amount) || 0,
+        quotationDate: r.quotation_date,
+        quotationStatus: r.quotation_status,
+        leadStatus: r.lead_status || (r.stage === 'converted' ? 'Converted' : 'Pending'),
+        invoiceId: r.invoice_id,
+        invoiceNumber: r.invoice_no,
+        invoiceNo: r.invoice_no,
+        invoiceAmount: parseFloat(r.invoice_amount) || 0,
+        conversionDate: r.converted_at,
+        convertedAt: r.converted_at,
         assignedTo: r.assigned_name,
         createdAt: r.created_at,
         updatedAt: r.updated_at,

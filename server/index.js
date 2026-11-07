@@ -56,16 +56,19 @@ ensurePythonDeps();
 
 // Middleware
 const allowedOrigins = [
-  "http://localhost:5173",
-  "http://localhost:4173",
+  "http://localhost:3000",
   "http://localhost:3001",
   "http://localhost:3002",
+  "http://localhost:5173",
+  "http://localhost:4173",
   "https://reonenergy.in",
   "https://www.reonenergy.in",
   "https://admin.reonenergy.in",
   "https://pos.reonenergy.in",
   "https://api.reonenergy.in",
 ];
+
+const localIpRegex = /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/;
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -74,7 +77,8 @@ app.use(cors({
     
     const isAllowed = allowedOrigins.includes(origin) || 
                       origin.endsWith('.vercel.app') || 
-                      origin.endsWith('.reonenergy.in');
+                      origin.endsWith('.reonenergy.in') ||
+                      localIpRegex.test(origin);
                       
     if (isAllowed) {
       callback(null, true);

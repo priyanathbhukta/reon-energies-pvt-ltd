@@ -665,11 +665,11 @@ def _page_bom(data: dict, S: dict) -> list:
             "item": "PV MODULES",
             "spec": f"{data['panel_watt']}Wp {data.get('module_technology', 'Mono-Crystalline Bifacial N-Type Topcon')}",
             "qty": f"{data['panel_count']} Nos.",
-            "brand": data.get("brands", "UTL / ADANI / VIKRAM / LUMINOUS")
+            "brand": data.get("brands", "UTL / LOOM / VIKRAM / WAAREE")
         }
 
     inverter_type = data.get("inverter_type", "String Inverter (On-Grid)")
-    inverter_brand = data.get("inverter_brand", "UTL / VIKRAM / LUMINOUS / HAVELLS")
+    inverter_brand = data.get("inverter_brand", "UTL / DEYE / LUMINOUS / EASTMAN / WAAREE")
     if len(bom_data) > 1:
         bom_data[1] = dict(bom_data[1])
         bom_data[1]["spec"] = f"{inverter_type}, Efficiency >98%, IP65"
@@ -681,7 +681,7 @@ def _page_bom(data: dict, S: dict) -> list:
         spec = "Deep Cycle Solar Battery"
         if battery_voltage not in ["", "N/A"]:
             spec += f" ({battery_voltage})"
-        b_brand = battery_brand if battery_brand else "LUMINOUS / EXIDE / OKAYA"
+        b_brand = battery_brand if battery_brand else "LUMINOUS / EASTMAN / UTL"
         bom_data.insert(2, {
             "item": "BATTERY BANK",
             "spec": spec,
@@ -918,19 +918,19 @@ def generate_quotation(data: dict, output_path: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _DEFAULT_BOM = [
-    {"item": "PV MODULES",                "spec": "590Wp Mono-Crystalline Bifacial N-Type Topcon", "qty": "6 Nos.",        "brand": "UTL / ADANI / VIKRAM / LUMINOUS"},
-    {"item": "STRING INVERTER",           "spec": "On-Grid, 1-Phase, Efficiency >98%, IP65",       "qty": "1 No.",         "brand": "UTL / VIKRAM / LUMINOUS / HAVELLS"},
+    {"item": "PV MODULES",                "spec": "590Wp Mono-Crystalline Bifacial N-Type Topcon", "qty": "6 Nos.",        "brand": "UTL / LOOM / VIKRAM / WAAREE"},
+    {"item": "STRING INVERTER",           "spec": "On-Grid, 1-Phase, Efficiency >98%, IP65",       "qty": "1 No.",         "brand": "UTL / DEYE / LUMINOUS / EASTMAN / WAAREE"},
     {"item": "MODULE MOUNTING STRUCTURE", "spec": "Hot-Dip Galvanised GI, Rooftop / Ground",       "qty": "As per Design", "brand": "AFTR Market / Fabricated"},
     {"item": "SOLAR DC CABLE",            "spec": "4 Sq.mm, UV-Protected, TÜV Certified",          "qty": "As per Design", "brand": "Apar Industries / Polycab / KEI"},
-    {"item": "AC CABLE",                  "spec": "4 Sqmm 2 Core IP68 UV Protected PVC COTED",         "qty": "As per Design", "brand": "Apar Industries / Polycab / KEI"},
+    {"item": "AC CABLE",                  "spec": "4 Sqmm Single Core IP68 UV Protected PVC COTED FRLSH",         "qty": "As per Design", "brand": "Apar Industries / Polycab / KEI / Finolex"},
     {"item": "MC4 CONNECTORS",            "spec": "UV-Protected, IP67, DC Rated",                  "qty": "As required",   "brand": "MC4 / Elmex / Phonix / Havells"},
-    {"item": "ACDB",                      "spec": "IP55, MCB Protection, Type-II SPD",             "qty": "1 Set",         "brand": "Apar Industries / Polycab / KEI"},
-    {"item": "DCDB",                      "spec": "IP55, String Fuses, SPD Type-II",               "qty": "1 Set",         "brand": "Apar Industries / Polycab / KEI"},
+    {"item": "ACDB",                      "spec": "IP55, MCB Protection, Type-II SPD",             "qty": "1 Set",         "brand": "Havells MCB Shibass / Elmac SPD"},
+    {"item": "DCDB",                      "spec": "IP55, String Fuses, SPD Type-II",               "qty": "1 Set",         "brand": "Havells 63A Fuse Shibass / Elmac SPD"},
     {"item": "EARTHING KIT",              "spec": "6 ft Copper Bonded Rod + PIT cover with CHEMICAL BENTONITE",             "qty": "As required",   "brand": "True Power Ltd / ETP Earthing"},
-    {"item": "EARTHING CABLE",            "spec": "2.5 Sq.mm Copper, Single Core",                 "qty": "As required",   "brand": "Reputed Make"},
-    {"item": "LIGHTNING ARRESTOR",        "spec": "ESE Type, Class I+II Protection",               "qty": "As required",   "brand": "True Power / Nitro / ETP LPS"},
-    {"item": "CABLE TRAY & ACCESSORIES",  "spec": "Cable Tray PCV 45*25 Cable Tray ISI MARK",      "qty": "As required",   "brand": "TATA / JINDAL / SHYAM / JSW"},
-    {"item": "PVC WEARING",               "spec": "20 MM water pipe for covering DC CABLE and AC CABLE ",      "qty": "As required",         "brand": "SUPREME / FINOLEX / ASTRAL"},
+    {"item": "EARTHING CABLE",            "spec": "4 Sq.mm Copper, Single Core FRLSH",                 "qty": "As required",   "brand": "Reputed Make"},
+    {"item": "LIGHTNING ARRESTOR",        "spec": "1M COPPER Bonded Rod with PVC base",               "qty": "As required",   "brand": "True Power / Nitro / ETP LPS"},
+    {"item": "CABLE TRAY & ACCESSORIES",  "spec": "Cable Tray PCV 45*25 Cable Tray ISI MARK",      "qty": "As required",   "brand": "BINA Industries, Reputated Make"},
+    {"item": "PVC WEARING",               "spec": "20 MM PVC Conduct for covering DC CABLE and AC CABLE After Market / Fabricated",      "qty": "As required",         "brand": "SUPREME / FINOLEX / ASTRAL"},
 ]
 
 

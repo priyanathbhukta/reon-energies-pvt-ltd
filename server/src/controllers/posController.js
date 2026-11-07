@@ -427,6 +427,129 @@ router.get('/profile', authenticate, async (req, res) => {
   }
 });
 
+// ─── Helper: Validate UUID ─────────────────────────────────
+const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isValidUuid = (val) => typeof val === 'string' && uuidRegex.test(val);
+
+// ─── GET /api/pos/dashboard-stats or /api/v2/pos/dashboard-stats ──
+router.get('/dashboard-stats', authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const isSuperAdmin = req.user.roles && (req.user.roles.includes('super_admin') || req.user.roles.includes('sales_manager'));
+
+    // Check if partner exists for this user (safely checking UUID format)
+    let partnerRes = { rows: [] };
+    if (isValidUuid(userId)) {
+      partnerRes = await pool.query(
+        'SELECT id, shop_name, referral_code, user_id FROM pos_partners WHERE user_id = $1',
+        [userId]
+      );
+    }
+
+    let partnerId = partnerRes.rows[0]?.id || null;
+    let shopName = partnerRes.rows[0]?.shop_name || null;
+    let referralCode = partnerRes.rows[0]?.referral_code || null;
+
+    // If admin requests another partner's stats via query
+    if (isSuperAdmin && req.query.partnerId && isValidUuid(req.query.partnerId)) {
+      partnerId = req.query.partnerId;
+      const targetPartner = await pool.query('SELECT shop_name, referral_code, user_id FROM pos_partners WHERE id = $1', [partnerId]);
+      if (targetPartner.rows.length > 0) {
+        shopName = targetPartner.rows[0].shop_name;
+        referralCode = targetPartner.rows[0].referral_code;
+      }
+    }
+
+    let filterClause = '';
+    const params = [];
+
+    if (partnerId) {
+      params.push(partnerId, shopName || '', referralCode || '');
+      let userClause = '';
+      if (isValidUuid(userId)) {
+        params.push(userId);
+        userClause = `OR l.user_id = $${params.length}`;
+      }
+      filterClause = `
+        AND (
+          l.partner_id = $1 
+          OR (l.pos_name IS NOT NULL AND l.pos_name = $2)
+          OR (l.pos_id IS NOT NULL AND l.pos_id = $3)
+          ${userClause}
+        )
+      `;
+    } else if (!isSuperAdmin) {
+      return res.json({
+        success: true,
+        partner: null,
+        stats: {
+          totalLeads: 0,
+          pendingLeads: 0,
+          convertedLeads: 0,
+          conversionRate: 0,
+          totalQuotationValue: 0,
+          convertedBusinessValue: 0,
+        },
+        leads: [],
+      });
+    }
+
+    const query = `
+      SELECT 
+        l.id,
+        l.customer_name AS "customerName",
+        l.mobile AS "contactNumber",
+        l.email,
+        l.address,
+        COALESCE(l.quotation_no, q.offer_no) AS "quotationNumber",
+        COALESCE(l.quotation_date, q.created_at, l.created_at) AS "quotationDate",
+        COALESCE(l.quotation_amount, q.total_price, 0)::numeric AS "quotationAmount",
+        COALESCE(l.lead_status, CASE WHEN l.stage = 'converted' THEN 'Converted' ELSE 'Pending' END) AS "leadStatus",
+        COALESCE(l.invoice_no, i.invoice_no) AS "invoiceNumber",
+        COALESCE(l.converted_at, i.created_at) AS "conversionDate",
+        COALESCE(l.invoice_amount, i.grand_total, 0)::numeric AS "invoiceAmount",
+        l.created_at AS "createdAt",
+        l.stage
+      FROM leads l
+      LEFT JOIN quotations q ON l.quotation_id = q.id
+      LEFT JOIN invoices i ON l.invoice_id = i.id
+      WHERE l.deleted_at IS NULL ${filterClause}
+      ORDER BY l.created_at DESC;
+    `;
+
+    const leadsResult = await pool.query(query, params);
+    const leads = leadsResult.rows;
+
+    const totalLeads = leads.length;
+    const convertedLeads = leads.filter(
+      (l) => l.leadStatus === 'Converted' || l.stage === 'converted' || l.invoiceNumber
+    ).length;
+    const pendingLeads = totalLeads - convertedLeads;
+    const conversionRate = totalLeads > 0 ? Number(((convertedLeads / totalLeads) * 100).toFixed(1)) : 0;
+    const totalQuotationValue = leads.reduce((acc, l) => acc + (parseFloat(l.quotationAmount) || 0), 0);
+    const convertedBusinessValue = leads
+      .filter((l) => l.leadStatus === 'Converted' || l.stage === 'converted' || l.invoiceNumber)
+      .reduce((acc, l) => acc + (parseFloat(l.invoiceAmount) || 0), 0);
+
+    res.json({
+      success: true,
+      partner: partnerRes.rows[0] || null,
+      stats: {
+        totalLeads,
+        pendingLeads,
+        convertedLeads,
+        conversionRate,
+        totalQuotationValue,
+        convertedBusinessValue,
+      },
+      leads,
+    });
+  } catch (err) {
+    console.error('POS Dashboard Stats error:', err);
+    res.status(500).json({ error: 'Failed to fetch dashboard stats' });
+  }
+});
+
 // ─── PUT /api/pos/settings ──────────────────────────────────
 // Update profile settings
 router.put('/settings', authenticate, async (req, res) => {

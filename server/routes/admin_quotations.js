@@ -240,11 +240,98 @@ router.post('/', async (req, res) => {
     ];
 
     const result = await pool.query(query, values);
+    const createdQuotation = result.rows[0];
+
+    // 4b. Automatically Create / Sync Linked Lead Record
+    let leadRecord = null;
+    try {
+      const customerMobile = (data.contact_number || data.contactNumber || data.mobile || data.phone || '').toString().trim() || 'N/A';
+      const customerEmail = data.email || null;
+      const customerAddress = data.address || null;
+      const custState = data.state || null;
+      const custDistrict = data.district || null;
+      const custPincode = data.pincode || null;
+      const estimatedKw = parseFloat(data.system_capacity_kw || data.capacity || data.solar_capacity || data.kw || 0) || null;
+      const validRoofTypes = ['flat', 'sloped', 'metal_sheet', 'rcc', 'other'];
+      const roofType = (data.roof_type && validRoofTypes.includes(data.roof_type)) ? data.roof_type : 'other';
+      const validPropTypes = ['residential', 'commercial', 'industrial', 'agricultural', 'institutional'];
+      const propertyType = (data.property_type && validPropTypes.includes(data.property_type)) ? data.property_type : 'residential';
+      const leadSource = (createdByType === 'pos' || partnerId) ? 'pos_partner' : 'website';
+
+      const leadQuery = `
+        INSERT INTO leads (
+          partner_id, assigned_to, customer_name, mobile, email, address,
+          state, district, pincode, estimated_kw, roof_type, property_type,
+          source, stage, priority, quotation_id, quotation_no, quotation_amount,
+          quotation_date, quotation_status, lead_status, pos_name, pos_id, user_id
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+        ON CONFLICT (quotation_id) DO UPDATE SET
+          customer_name = EXCLUDED.customer_name,
+          mobile = EXCLUDED.mobile,
+          email = COALESCE(EXCLUDED.email, leads.email),
+          address = COALESCE(EXCLUDED.address, leads.address),
+          state = COALESCE(EXCLUDED.state, leads.state),
+          district = COALESCE(EXCLUDED.district, leads.district),
+          pincode = COALESCE(EXCLUDED.pincode, leads.pincode),
+          estimated_kw = COALESCE(EXCLUDED.estimated_kw, leads.estimated_kw),
+          quotation_no = EXCLUDED.quotation_no,
+          quotation_amount = EXCLUDED.quotation_amount,
+          quotation_date = EXCLUDED.quotation_date,
+          pos_name = EXCLUDED.pos_name,
+          pos_id = EXCLUDED.pos_id,
+          partner_id = COALESCE(EXCLUDED.partner_id, leads.partner_id),
+          user_id = COALESCE(EXCLUDED.user_id, leads.user_id),
+          updated_at = NOW()
+        RETURNING *;
+      `;
+      const leadValues = [
+        partnerId,
+        userId,
+        customer_name || 'N/A',
+        customerMobile,
+        customerEmail,
+        customerAddress,
+        custState,
+        custDistrict,
+        custPincode,
+        estimatedKw,
+        roofType,
+        propertyType,
+        leadSource,
+        'quotation_sent',
+        'medium',
+        createdQuotation.id,
+        createdQuotation.offer_no,
+        clean_total,
+        createdQuotation.created_at,
+        'pending',
+        'Pending',
+        posName,
+        posId,
+        userId
+      ];
+
+      const leadRes = await pool.query(leadQuery, leadValues);
+      leadRecord = leadRes.rows[0];
+
+      if (leadRecord) {
+        try {
+          await pool.query(
+            `INSERT INTO lead_status_history (lead_id, to_stage, changed_by, notes)
+             VALUES ($1, 'quotation_sent', $2, $3)`,
+            [leadRecord.id, userId || null, `Quotation generated: ${createdQuotation.offer_no}`]
+          );
+        } catch (_) {}
+      }
+    } catch (leadErr) {
+      console.error('[Quotation] Failed to auto-create linked lead:', leadErr);
+    }
 
     // 5. Respond
     res.status(201).json({
       success: true,
-      quotation: result.rows[0],
+      quotation: createdQuotation,
+      lead: leadRecord,
       pdfUrl,
     });
 
@@ -279,20 +366,28 @@ router.post('/', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const isPosOnly = req.query.my === 'true';
+    const statusFilter = req.query.status; // 'pending' | 'converted'
     let query = `
       SELECT id, offer_no, customer_name, total_price, payment_mode,
              down_payment, loan_amount, interest_rate, tenure, emi_amount,
              total_interest, total_emi_paid, pdf_url, raw_data,
              pos_name, pos_id, created_by_type, partner_id, user_id,
+             status, invoice_id, invoice_no, converted_at,
              created_at, updated_at
       FROM quotations
+      WHERE 1=1
     `;
     const values = [];
 
     // If POS user requests only their quotations
     if (isPosOnly && req.user?.id) {
-      query += ` WHERE user_id = $1 OR partner_id = (SELECT id FROM pos_partners WHERE user_id = $1)`;
       values.push(req.user.id);
+      query += ` AND (user_id = $${values.length} OR partner_id = (SELECT id FROM pos_partners WHERE user_id = $${values.length}))`;
+    }
+
+    if (statusFilter) {
+      values.push(statusFilter);
+      query += ` AND status = $${values.length}`;
     }
 
     query += ` ORDER BY created_at DESC`;

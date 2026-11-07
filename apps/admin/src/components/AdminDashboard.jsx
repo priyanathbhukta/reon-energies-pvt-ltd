@@ -57,6 +57,7 @@ export default function AdminDashboard() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
     const [editInvoiceData, setEditInvoiceData] = useState(null)
     const [editQuotationData, setEditQuotationData] = useState(null)
+    const [preselectedQuotation, setPreselectedQuotation] = useState(null)
     const [enqFromDate, setEnqFromDate] = useState('')
     const [enqToDate, setEnqToDate] = useState('')
     const [enqSearchHistory, setEnqSearchHistory] = useState(() => {
@@ -322,14 +323,26 @@ export default function AdminDashboard() {
                     <div className="max-w-6xl mx-auto">
                         {activeTab === 'enquiries' && <EnquiriesTab {...{ filtered, filter, setFilter, searchTerm, setSearchTerm, expandedRow, setExpandedRow, updateStatus, deleteEnquiry, formatDate, formatCurrency, enqFromDate, setEnqFromDate, enqToDate, setEnqToDate, enqSearchHistory, setEnqSearchHistory, addToEnqHistory }} />}
                         {activeTab === 'pos_partners' && <PosPartnersTab partners={posPartners} onRefresh={fetchAll} headers={headers} formatDate={formatDate} />}
-                        {activeTab === 'leads' && <LeadsTab leads={leads} onRefresh={fetchAll} headers={headers} formatDate={formatDate} />}
+                        {activeTab === 'leads' && (
+                            <LeadsTab
+                                leads={leads}
+                                posPartners={posPartners}
+                                onRefresh={fetchAll}
+                                headers={headers}
+                                formatDate={formatDate}
+                                onSelectQuotationForInvoice={(quote) => {
+                                    setPreselectedQuotation(quote);
+                                    setActiveTab('invoice');
+                                }}
+                            />
+                        )}
                         {activeTab === 'projects' && <ProjectsTab />}
                         {activeTab === 'schemes' && <SchemesTab schemes={schemes} onEdit={(s) => setEditModal({ type: 'schemes', data: s, isNew: false })} onAdd={() => setEditModal({ type: 'schemes', data: { icon: '☀️', badge: '', name: '', tagline: '', eligibility: [''], subsidy_breakdown: [{ label: '', value: '' }], reon_help: [''], total_subsidy: '', accent: 'from-emerald-700 to-emerald-600', featured: false, sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('schemes', id)} />}
                         {activeTab === 'testimonials' && <TestimonialsTab testimonials={testimonials} onEdit={(t) => setEditModal({ type: 'testimonials', data: t, isNew: false })} onAdd={() => setEditModal({ type: 'testimonials', data: { name: '', role: '', rating: 5, review: '', avatar_initials: '', avatar_color: 'bg-emerald', date_label: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('testimonials', id)} />}
                         {activeTab === 'gallery' && <GalleryTab gallery={gallery} onEdit={(g) => setEditModal({ type: 'gallery', data: g, isNew: false })} onAdd={() => setEditModal({ type: 'gallery', data: { image_url: '', alt_text: '', label: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('gallery', id)} />}
                         {activeTab === 'directors' && <DirectorsTab directors={directors} onEdit={(d) => setEditModal({ type: 'directors', data: d, isNew: false })} onAdd={() => setEditModal({ type: 'directors', data: { name: '', role: '', description: '', image_url: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('directors', id)} />}
                         {activeTab === 'quotation' && <QuotationTab editData={editQuotationData} onClearEdit={() => setEditQuotationData(null)} />}
-                        {activeTab === 'invoice' && <InvoiceTab editData={editInvoiceData} onClearEdit={() => setEditInvoiceData(null)} />}
+                        {activeTab === 'invoice' && <InvoiceTab editData={editInvoiceData} onClearEdit={() => setEditInvoiceData(null)} preselectedQuotation={preselectedQuotation} />}
                         {activeTab === 'documents' && <GeneratedDocumentsTab onEditInvoice={(data) => { setEditInvoiceData(data); setActiveTab('invoice'); }} onEditQuotation={(data) => { setEditQuotationData(data); setActiveTab('quotation'); }} />}
                     </div>
                 </main>
@@ -800,10 +813,10 @@ function QuotationTab({ editData, onClearEdit }) {
 }
 
 // ========== INVOICE TAB ==========
-function InvoiceTab({ editData, onClearEdit }) {
+function InvoiceTab({ editData, onClearEdit, preselectedQuotation }) {
     return (
         <div className="space-y-5">
-            <InvoiceForm editData={editData} onClearEdit={onClearEdit} />
+            <InvoiceForm editData={editData} onClearEdit={onClearEdit} preselectedQuotation={preselectedQuotation} />
         </div>
     )
 }
@@ -1697,9 +1710,13 @@ function GeneratedDocumentsTab({ onEditInvoice, onEditQuotation }) {
 }
 
 // ========== POS LEADS TAB ==========
-function LeadsTab({ leads, onRefresh, headers, formatDate }) {
+function LeadsTab({ leads, posPartners, onRefresh, headers, formatDate, onSelectQuotationForInvoice }) {
+    const [viewMode, setViewMode] = useState('all'); // 'all' | 'pos_wise' | 'pending_quotes' | 'converted_quotes'
+    const [selectedPartnerId, setSelectedPartnerId] = useState('all');
     const [stageFilter, setStageFilter] = useState('all');
+    const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'pending' | 'converted'
     const [searchTerm, setSearchTerm] = useState('');
+    const [quotationSearch, setQuotationSearch] = useState('');
     const [fromDate, setFromDate] = useState('');
     const [toDate, setToDate] = useState('');
     const [searchHistory, setSearchHistory] = useState(() => {
@@ -1748,17 +1765,54 @@ function LeadsTab({ leads, onRefresh, headers, formatDate }) {
         }
     };
 
+    // Calculate aggregated database metrics across all POS users
+    const totalLeadsCount = leads.length;
+    const convertedLeadsCount = leads.filter(l => l.stage === 'converted' || l.leadStatus === 'Converted' || l.invoiceNumber || l.invoiceNo).length;
+    const pendingLeadsCount = totalLeadsCount - convertedLeadsCount;
+    const conversionPercentage = totalLeadsCount > 0 ? ((convertedLeadsCount / totalLeadsCount) * 100).toFixed(1) : 0;
+    const totalQuotationValue = leads.reduce((sum, l) => sum + (parseFloat(l.quotationAmount) || 0), 0);
+    const convertedBusinessValue = leads
+        .filter(l => l.stage === 'converted' || l.leadStatus === 'Converted' || l.invoiceNumber || l.invoiceNo)
+        .reduce((sum, l) => sum + (parseFloat(l.invoiceAmount) || 0), 0);
+
+    // Multi-filtering logic
     const filteredLeads = leads.filter(l => {
+        // POS Partner filter
+        if (selectedPartnerId !== 'all') {
+            const matchesPartner = (l.partnerId && l.partnerId === selectedPartnerId) ||
+                                   (l.partnerShopName && l.partnerShopName === selectedPartnerId) ||
+                                   (l.posName && l.posName === selectedPartnerId);
+            if (!matchesPartner) return false;
+        }
+
+        // Lead Status filter (Pending / Converted)
+        const isConverted = l.stage === 'converted' || l.leadStatus === 'Converted' || !!l.invoiceNumber || !!l.invoiceNo;
+        if (statusFilter === 'pending' && isConverted) return false;
+        if (statusFilter === 'converted' && !isConverted) return false;
+
+        // Stage filter
         if (stageFilter !== 'all' && l.stage !== stageFilter) return false;
+
+        // Quotation Number filter
+        if (quotationSearch.trim()) {
+            const qTerm = quotationSearch.trim().toLowerCase();
+            const qNum = (l.quotationNumber || l.quotationNo || '').toLowerCase();
+            if (!qNum.includes(qTerm)) return false;
+        }
+
+        // Customer & text search filter
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
-            const matchesSearch = (l.customerName || '').toLowerCase().includes(term) ||
-                   (l.mobile || '').includes(term) ||
-                   (l.partnerShopName || '').toLowerCase().includes(term);
-            if (!matchesSearch) return false;
+            const matchesCustomer = (l.customerName || '').toLowerCase().includes(term) ||
+                                    (l.mobile || '').includes(term) ||
+                                    (l.partnerShopName || '').toLowerCase().includes(term) ||
+                                    (l.posName || '').toLowerCase().includes(term);
+            if (!matchesCustomer) return false;
         }
+
+        // Date range filter
         if (fromDate || toDate) {
-            const recordTime = new Date(l.createdAt).getTime();
+            const recordTime = new Date(l.createdAt || l.quotationDate).getTime();
             if (fromDate) {
                 const start = new Date(fromDate).setHours(0, 0, 0, 0);
                 if (recordTime < start) return false;
@@ -1771,28 +1825,200 @@ function LeadsTab({ leads, onRefresh, headers, formatDate }) {
         return true;
     });
 
+    // POS-Wise Aggregated Performance
+    const posWisePerformance = (posPartners || []).map(p => {
+        const partnerLeads = leads.filter(l => 
+            (l.partnerId && l.partnerId === p.id) ||
+            (l.partnerShopName && l.partnerShopName === p.shop_name) ||
+            (l.posName && l.posName === p.shop_name) ||
+            (l.posId && l.posId === p.referral_code)
+        );
+        const total = partnerLeads.length;
+        const converted = partnerLeads.filter(l => l.stage === 'converted' || l.leadStatus === 'Converted' || l.invoiceNumber || l.invoiceNo).length;
+        const pending = total - converted;
+        const rate = total > 0 ? ((converted / total) * 100).toFixed(1) : 0;
+        const quoteValue = partnerLeads.reduce((sum, l) => sum + (parseFloat(l.quotationAmount) || 0), 0);
+        const bizValue = partnerLeads
+            .filter(l => l.stage === 'converted' || l.leadStatus === 'Converted' || l.invoiceNumber || l.invoiceNo)
+            .reduce((sum, l) => sum + (parseFloat(l.invoiceAmount) || 0), 0);
+
+        return {
+            id: p.id,
+            shopName: p.shop_name,
+            posId: p.referral_code || p.id?.slice(0, 8),
+            ownerName: p.full_name || 'POS Partner',
+            totalLeads: total,
+            pendingLeads: pending,
+            convertedLeads: converted,
+            conversionRate: rate,
+            totalQuotationValue: quoteValue,
+            convertedBusinessValue: bizValue,
+        };
+    });
+
     return (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="p-5 border-b border-gray-100">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                    <div>
-                        <h2 className="text-lg font-display font-bold text-navy">POS Leads</h2>
-                        <p className="text-sm text-gray-400">Leads submitted by POS partners ({leads.length} total)</p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                            <input
-                                type="text"
-                                placeholder="Search leads..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                onBlur={() => addToHistory(searchTerm)}
-                                onKeyDown={(e) => { if (e.key === 'Enter') addToHistory(searchTerm); }}
-                                className="pl-9 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500"
-                            />
+        <div className="space-y-5">
+            {/* 1. Global Lead Statistics Overview */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Total Leads</p>
+                    <p className="text-xl font-bold font-display text-navy mt-1">{totalLeadsCount}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">Across all POS users</p>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                    <p className="text-[11px] font-semibold text-blue-500 uppercase tracking-wider">Pending Leads</p>
+                    <p className="text-xl font-bold font-display text-blue-600 mt-1">{pendingLeadsCount}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">Awaiting conversion</p>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                    <p className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider">Converted Leads</p>
+                    <p className="text-xl font-bold font-display text-emerald-600 mt-1">{convertedLeadsCount}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">Invoiced by admin</p>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                    <p className="text-[11px] font-semibold text-amber-500 uppercase tracking-wider">Conversion %</p>
+                    <p className="text-xl font-bold font-display text-amber-600 mt-1">{conversionPercentage}%</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">(Converted / Total) × 100</p>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                    <p className="text-[11px] font-semibold text-purple-500 uppercase tracking-wider">Quotation Value</p>
+                    <p className="text-base font-bold font-display text-purple-700 mt-1 truncate">
+                        ₹ {Number(totalQuotationValue || 0).toLocaleString('en-IN')}
+                    </p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">Total quotes generated</p>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                    <p className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider">Converted Value</p>
+                    <p className="text-base font-bold font-display text-emerald-700 mt-1 truncate">
+                        ₹ {Number(convertedBusinessValue || 0).toLocaleString('en-IN')}
+                    </p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">Invoiced business volume</p>
+                </div>
+            </div>
+
+            {/* 2. Sub-views Navigation */}
+            <div className="bg-white rounded-xl border border-gray-100 p-2 shadow-sm flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                        onClick={() => { setViewMode('all'); setStatusFilter('all'); }}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                            viewMode === 'all' && statusFilter === 'all'
+                                ? 'bg-navy text-white shadow-sm'
+                                : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                        }`}
+                    >
+                        📋 All Leads & Quotations ({leads.length})
+                    </button>
+                    <button
+                        onClick={() => { setViewMode('all'); setStatusFilter('pending'); }}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                            viewMode === 'all' && statusFilter === 'pending'
+                                ? 'bg-blue-600 text-white shadow-sm'
+                                : 'bg-gray-50 text-blue-700 hover:bg-blue-50'
+                        }`}
+                    >
+                        ⏳ Awaiting Conversion ({pendingLeadsCount})
+                    </button>
+                    <button
+                        onClick={() => { setViewMode('all'); setStatusFilter('converted'); }}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                            viewMode === 'all' && statusFilter === 'converted'
+                                ? 'bg-emerald-600 text-white shadow-sm'
+                                : 'bg-gray-50 text-emerald-700 hover:bg-emerald-50'
+                        }`}
+                    >
+                        ✅ Converted ({convertedLeadsCount})
+                    </button>
+                    <button
+                        onClick={() => setViewMode('pos_wise')}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                            viewMode === 'pos_wise'
+                                ? 'bg-navy text-white shadow-sm'
+                                : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                        }`}
+                    >
+                        🏬 POS-Wise Performance
+                    </button>
+                </div>
+                <button
+                    onClick={onRefresh}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold bg-emerald-50 text-emerald-600 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Refresh Data
+                </button>
+            </div>
+
+            {/* 3. Centralized Lead Table Container */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                {/* Filters Bar */}
+                <div className="p-4 border-b border-gray-100 space-y-3 bg-gray-50/40">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex items-center gap-2 flex-wrap flex-1">
+                            {/* Customer Search */}
+                            <div className="relative min-w-[200px] flex-1 sm:flex-initial">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search customer, phone..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    onBlur={() => addToHistory(searchTerm)}
+                                    className="w-full pl-9 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 bg-white"
+                                />
+                            </div>
+
+                            {/* Quotation Number Search */}
+                            <div className="relative min-w-[150px]">
+                                <input
+                                    type="text"
+                                    placeholder="Quote # (e.g. REPL/26-27/...)"
+                                    value={quotationSearch}
+                                    onChange={(e) => setQuotationSearch(e.target.value)}
+                                    className="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 bg-white"
+                                />
+                            </div>
+
+                            {/* POS Partner Filter */}
+                            <select
+                                value={selectedPartnerId}
+                                onChange={(e) => setSelectedPartnerId(e.target.value)}
+                                className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-emerald-500 bg-white"
+                            >
+                                <option value="all">All POS Partners</option>
+                                {(posPartners || []).map(p => (
+                                    <option key={p.id} value={p.shop_name}>
+                                        {p.shop_name} ({p.referral_code || p.id?.slice(0, 6)})
+                                    </option>
+                                ))}
+                            </select>
+
+                            {/* Lead Status Filter */}
+                            <select
+                                value={statusFilter}
+                                onChange={(e) => setStatusFilter(e.target.value)}
+                                className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-emerald-500 bg-white"
+                            >
+                                <option value="all">All Conversion Status</option>
+                                <option value="pending">Pending Invoices</option>
+                                <option value="converted">Converted Invoices</option>
+                            </select>
+
+                            {/* Stage Filter */}
+                            <select
+                                value={stageFilter}
+                                onChange={(e) => setStageFilter(e.target.value)}
+                                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-emerald-500 bg-white"
+                            >
+                                <option value="all">All Stages</option>
+                                {Object.entries(STAGE_CONFIG).map(([key, val]) => (
+                                    <option key={key} value={key}>{val.label}</option>
+                                ))}
+                            </select>
                         </div>
-                        <div className="flex items-center gap-2">
+
+                        {/* Date Range Filter */}
+                        <div className="flex items-center gap-1.5">
                             <input
                                 type="date"
                                 value={fromDate}
@@ -1806,100 +2032,191 @@ function LeadsTab({ leads, onRefresh, headers, formatDate }) {
                                 onChange={(e) => setToDate(e.target.value)}
                                 className="border border-gray-200 rounded-lg p-1.5 text-xs text-gray-700 bg-white focus:outline-none focus:border-emerald-500"
                             />
-                            {(fromDate || toDate) && (
-                                <button onClick={() => { setFromDate(''); setToDate(''); }} className="text-xs text-red-500 hover:underline">Reset</button>
+                            {(fromDate || toDate || selectedPartnerId !== 'all' || quotationSearch) && (
+                                <button
+                                    onClick={() => { setFromDate(''); setToDate(''); setSelectedPartnerId('all'); setQuotationSearch(''); setSearchTerm(''); setStageFilter('all'); setStatusFilter('all'); }}
+                                    className="text-xs text-red-500 hover:underline font-medium"
+                                >
+                                    Reset
+                                </button>
                             )}
                         </div>
-                        <select
-                            value={stageFilter}
-                            onChange={(e) => setStageFilter(e.target.value)}
-                            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-emerald-500"
-                        >
-                            <option value="all">All Stages</option>
-                            {Object.entries(STAGE_CONFIG).map(([key, val]) => (
-                                <option key={key} value={key}>{val.label}</option>
-                            ))}
-                        </select>
-                        <button onClick={onRefresh} className="text-xs font-semibold bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-lg hover:bg-emerald-100">
-                            <RefreshCw className="w-3.5 h-3.5" />
-                        </button>
                     </div>
                 </div>
-                {searchHistory.length > 0 && (
-                    <div className="flex items-center gap-1.5 mt-3 flex-wrap border-t border-gray-50 pt-2">
-                        <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Recent Searches:</span>
-                        {searchHistory.map((h, i) => (
-                            <button key={i} onClick={() => setSearchTerm(h)} className="text-[10px] bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200 px-2 py-0.5 rounded-full font-medium">
-                                {h}
-                            </button>
-                        ))}
-                        <button onClick={() => { setSearchHistory([]); localStorage.removeItem('reon_search_history_leads'); }} className="text-[10px] text-red-500 hover:underline">Clear</button>
+
+                {/* Main Table Views */}
+                {viewMode === 'pos_wise' ? (
+                    /* POS-Wise Performance Table */
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400 font-semibold bg-gray-50/50">
+                                    <th className="text-left py-3.5 px-5">POS Partner & Shop</th>
+                                    <th className="text-left py-3.5 px-3">POS ID</th>
+                                    <th className="text-center py-3.5 px-3">Total Leads</th>
+                                    <th className="text-center py-3.5 px-3">Pending</th>
+                                    <th className="text-center py-3.5 px-3">Converted</th>
+                                    <th className="text-center py-3.5 px-3">Conversion Rate</th>
+                                    <th className="text-right py-3.5 px-4">Quotation Value</th>
+                                    <th className="text-right py-3.5 px-5">Converted Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {posWisePerformance.length === 0 ? (
+                                    <tr><td colSpan="8" className="text-center py-12 text-gray-400">No POS Partners found</td></tr>
+                                ) : posWisePerformance.map((p) => (
+                                    <tr key={p.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
+                                        <td className="py-3.5 px-5">
+                                            <p className="font-semibold text-navy">{p.shopName}</p>
+                                            <p className="text-xs text-gray-400">{p.ownerName}</p>
+                                        </td>
+                                        <td className="py-3.5 px-3 font-mono text-xs font-semibold text-gray-600">
+                                            {p.posId}
+                                        </td>
+                                        <td className="py-3.5 px-3 text-center font-bold text-navy">
+                                            {p.totalLeads}
+                                        </td>
+                                        <td className="py-3.5 px-3 text-center text-blue-600 font-semibold">
+                                            {p.pendingLeads}
+                                        </td>
+                                        <td className="py-3.5 px-3 text-center text-emerald-600 font-semibold">
+                                            {p.convertedLeads}
+                                        </td>
+                                        <td className="py-3.5 px-3 text-center">
+                                            <span className="font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full text-xs">
+                                                {p.conversionRate}%
+                                            </span>
+                                        </td>
+                                        <td className="py-3.5 px-4 text-right font-mono font-medium text-purple-700">
+                                            ₹ {Number(p.totalQuotationValue || 0).toLocaleString('en-IN')}
+                                        </td>
+                                        <td className="py-3.5 px-5 text-right font-mono font-bold text-emerald-700">
+                                            ₹ {Number(p.convertedBusinessValue || 0).toLocaleString('en-IN')}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                ) : (
+                    /* All Leads & Quotations Table */
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400 font-semibold bg-gray-50/50">
+                                    <th className="text-left py-3.5 px-5">Customer</th>
+                                    <th className="text-left py-3.5 px-3">Contact</th>
+                                    <th className="text-left py-3.5 px-3">POS Partner</th>
+                                    <th className="text-left py-3.5 px-3">Quotation No</th>
+                                    <th className="text-right py-3.5 px-3">Quote Amount</th>
+                                    <th className="text-center py-3.5 px-3">Lead Status</th>
+                                    <th className="text-left py-3.5 px-3">Linked Invoice</th>
+                                    <th className="text-right py-3.5 px-5">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredLeads.length === 0 ? (
+                                    <tr><td colSpan="8" className="text-center py-12 text-gray-400">No matching leads or quotations found</td></tr>
+                                ) : filteredLeads.map((lead) => {
+                                    const isConverted = lead.stage === 'converted' || lead.leadStatus === 'Converted' || !!lead.invoiceNumber || !!lead.invoiceNo;
+                                    const quoteNo = lead.quotationNumber || lead.quotationNo;
+                                    const invoiceNo = lead.invoiceNumber || lead.invoiceNo;
+                                    const quoteAmt = parseFloat(lead.quotationAmount) || 0;
+
+                                    return (
+                                        <tr key={lead.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                                            <td className="py-3.5 px-5">
+                                                <p className="font-semibold text-navy">{lead.customerName}</p>
+                                                <p className="text-xs text-gray-400">{lead.address || lead.district || '—'}</p>
+                                            </td>
+                                            <td className="py-3.5 px-3">
+                                                <p className="text-gray-700 font-mono text-xs">{lead.mobile}</p>
+                                                <p className="text-xs text-gray-400">{lead.email || '—'}</p>
+                                            </td>
+                                            <td className="py-3.5 px-3">
+                                                <p className="text-gray-800 font-medium">{lead.partnerShopName || lead.posName || '—'}</p>
+                                                <p className="text-[11px] text-gray-400">{lead.posId || lead.source || 'pos_partner'}</p>
+                                            </td>
+                                            <td className="py-3.5 px-3">
+                                                {quoteNo ? (
+                                                    <span className="font-mono text-xs font-semibold bg-gray-100 text-gray-800 px-2 py-0.5 rounded border border-gray-200">
+                                                        {quoteNo}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-gray-400 text-xs">—</span>
+                                                )}
+                                                <p className="text-[10px] text-gray-400 mt-0.5">{formatDate(lead.quotationDate || lead.createdAt)}</p>
+                                            </td>
+                                            <td className="py-3.5 px-3 text-right font-mono font-semibold text-gray-800">
+                                                {quoteAmt > 0 ? `₹ ${quoteAmt.toLocaleString('en-IN')}` : '—'}
+                                            </td>
+                                            <td className="py-3.5 px-3 text-center">
+                                                {isConverted ? (
+                                                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700">
+                                                        Converted
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">
+                                                        Pending
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="py-3.5 px-3">
+                                                {invoiceNo ? (
+                                                    <div>
+                                                        <span className="font-mono text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                                            {invoiceNo}
+                                                        </span>
+                                                        {lead.convertedAt && (
+                                                            <p className="text-[10px] text-gray-400 mt-0.5">{formatDate(lead.convertedAt)}</p>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-xs text-gray-400 italic">Not converted</span>
+                                                )}
+                                            </td>
+                                            <td className="py-3.5 px-5 text-right">
+                                                <div className="flex items-center justify-end gap-1.5">
+                                                    {!isConverted && quoteNo && onSelectQuotationForInvoice && (
+                                                        <button
+                                                            onClick={() => onSelectQuotationForInvoice({
+                                                                id: lead.quotationId,
+                                                                offer_no: quoteNo,
+                                                                customer_name: lead.customerName,
+                                                                total_price: quoteAmt,
+                                                                pos_name: lead.partnerShopName || lead.posName,
+                                                                raw_data: {
+                                                                    address: lead.address,
+                                                                    mobile: lead.mobile,
+                                                                    email: lead.email,
+                                                                    system_capacity_kw: lead.estimatedKw,
+                                                                }
+                                                            })}
+                                                            className="text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-md shadow-sm transition-colors whitespace-nowrap"
+                                                            title="Generate invoice to convert this quotation"
+                                                        >
+                                                            Create Invoice
+                                                        </button>
+                                                    )}
+                                                    <select
+                                                        value={lead.stage}
+                                                        onChange={(e) => handleStageUpdate(lead.id, e.target.value)}
+                                                        className="text-[11px] border border-gray-200 rounded-md px-1.5 py-1 focus:outline-none focus:border-emerald-500 bg-white"
+                                                    >
+                                                        {Object.entries(STAGE_CONFIG).map(([key, val]) => (
+                                                            <option key={key} value={key}>{val.label}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
                     </div>
                 )}
             </div>
-            <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                    <thead>
-                        <tr className="border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400 font-semibold">
-                            <th className="text-left py-3 px-5">Customer</th>
-                            <th className="text-left py-3 px-3">Contact</th>
-                            <th className="text-left py-3 px-3">POS Partner</th>
-                            <th className="text-left py-3 px-3">Stage</th>
-                            <th className="text-left py-3 px-3">Priority</th>
-                            <th className="text-left py-3 px-3">Est. kW</th>
-                            <th className="text-left py-3 px-3">Date</th>
-                            <th className="text-right py-3 px-5">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {filteredLeads.length === 0 ? (
-                            <tr><td colSpan="8" className="text-center py-12 text-gray-400">No leads found</td></tr>
-                        ) : filteredLeads.map((lead) => (
-                            <tr key={lead.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                                <td className="py-3.5 px-5">
-                                    <p className="font-semibold text-navy">{lead.customerName}</p>
-                                    <p className="text-xs text-gray-400">{lead.address || lead.district || '—'}</p>
-                                </td>
-                                <td className="py-3.5 px-3">
-                                    <p className="text-gray-600">{lead.mobile}</p>
-                                    <p className="text-xs text-gray-400">{lead.email || '—'}</p>
-                                </td>
-                                <td className="py-3.5 px-3">
-                                    <p className="text-gray-700 font-medium">{lead.partnerShopName || '—'}</p>
-                                    <p className="text-xs text-gray-400">{lead.source || 'pos_partner'}</p>
-                                </td>
-                                <td className="py-3.5 px-3">
-                                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${STAGE_CONFIG[lead.stage]?.color || 'bg-gray-100 text-gray-600'}`}>
-                                        {STAGE_CONFIG[lead.stage]?.label || lead.stage}
-                                    </span>
-                                </td>
-                                <td className="py-3.5 px-3">
-                                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${PRIORITY_CONFIG[lead.priority] || 'bg-gray-100 text-gray-600'}`}>
-                                        {(lead.priority || 'medium').toUpperCase()}
-                                    </span>
-                                </td>
-                                <td className="py-3.5 px-3 text-gray-600 font-medium">
-                                    {lead.estimatedKw ? `${lead.estimatedKw} kW` : '—'}
-                                </td>
-                                <td className="py-3.5 px-3 text-gray-400 text-xs">
-                                    {formatDate(lead.createdAt)}
-                                </td>
-                                <td className="py-3.5 px-5 text-right">
-                                    <select
-                                        value={lead.stage}
-                                        onChange={(e) => handleStageUpdate(lead.id, e.target.value)}
-                                        className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:border-emerald-500 bg-white"
-                                    >
-                                        {Object.entries(STAGE_CONFIG).map(([key, val]) => (
-                                            <option key={key} value={key}>{val.label}</option>
-                                        ))}
-                                    </select>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
         </div>
-    )
+    );
 }

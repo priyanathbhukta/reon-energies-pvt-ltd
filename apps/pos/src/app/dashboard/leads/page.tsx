@@ -35,6 +35,11 @@ interface Lead {
   priority: 'low' | 'medium' | 'high';
   source: string;
   createdAt: string;
+  quotationNumber?: string;
+  quotationAmount?: number;
+  leadStatus?: string;
+  invoiceNumber?: string;
+  conversionDate?: string;
 }
 
 const stageConfig: Record<LeadStage, { label: string; color: string; bgColor: string }> = {
@@ -300,12 +305,26 @@ export default function LeadsPage() {
                             {(lead.customerName || 'UN').split(' ').map((n) => n[0]).join('')}
                           </div>
                           <div>
-                            <span className="text-sm font-medium text-foreground">
-                              {lead.customerName}
-                            </span>
-                            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                              <Phone className="w-3 h-3" />
-                              {lead.mobile}
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-foreground">
+                                {lead.customerName}
+                              </span>
+                              {lead.quotationNumber && (
+                                <span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.2 rounded border border-primary/20">
+                                  {lead.quotationNumber}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                              <span className="flex items-center gap-1 font-mono">
+                                <Phone className="w-3 h-3" />
+                                {lead.mobile}
+                              </span>
+                              {lead.invoiceNumber && (
+                                <span className="font-mono text-[10px] text-emerald-600 bg-emerald-500/10 px-1.5 rounded">
+                                  Inv: {lead.invoiceNumber}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>

@@ -127,7 +127,7 @@ function RRow({ label, value, bold }) {
   );
 }
 
-export default function InvoiceForm({ editData, onClearEdit }) {
+export default function InvoiceForm({ editData, onClearEdit, preselectedQuotation }) {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -140,6 +140,27 @@ export default function InvoiceForm({ editData, onClearEdit }) {
   const [items, setItems] = useState([{ id: 1, name: '', description: '', hsn: '', quantity: 1, unit: 'Nos', rate: 0, tax: 18 }]);
   const [charges, setCharges] = useState({ loadingCharges: 0 });
   const [invLoading, setInvLoading] = useState(false);
+  const [quotations, setQuotations] = useState([]);
+  const [selectedQuotation, setSelectedQuotation] = useState(null);
+  const [loadingQuotes, setLoadingQuotes] = useState(false);
+
+  const fetchQuotations = async () => {
+    setLoadingQuotes(true);
+    try {
+      const token = localStorage.getItem('reon_admin_token');
+      const res = await fetch(`${API}/api/admin/quotations`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setQuotations(Array.isArray(data) ? data : []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch quotations for invoice linking', err);
+    } finally {
+      setLoadingQuotes(false);
+    }
+  };
 
   const fetchNextInvoiceNo = async () => {
     setInvLoading(true);
@@ -161,6 +182,58 @@ export default function InvoiceForm({ editData, onClearEdit }) {
     }
   };
 
+  const handleSelectQuotation = (quoteId) => {
+    if (!quoteId) {
+      setSelectedQuotation(null);
+      return;
+    }
+    const quote = quotations.find(q => String(q.id) === String(quoteId));
+    if (!quote) return;
+    setSelectedQuotation(quote);
+
+    let raw = {};
+    try {
+      raw = typeof quote.raw_data === 'string' ? JSON.parse(quote.raw_data) : (quote.raw_data || {});
+    } catch (_) {}
+
+    setCustomerDetails(prev => ({
+      ...prev,
+      name: quote.customer_name || prev.name,
+      address: raw.address || prev.address,
+      email: raw.email || prev.email,
+      phone: raw.contact_number || raw.contactNumber || raw.mobile || raw.phone || prev.phone,
+      state: raw.state || prev.state,
+    }));
+
+    const kw = raw.system_capacity_kw || raw.capacity || raw.solar_capacity || raw.kw;
+    const panelBrand = raw.panel_brand || 'Mono PERC Solar PV Modules';
+    const invBrand = raw.inverter_brand || 'Solar Grid-tied Inverter';
+
+    // Populate suggested items with quotation details
+    setItems([
+      {
+        id: 1,
+        name: kw ? `${kw} kW Complete Rooftop Solar Power System` : 'Complete Rooftop Solar Power System',
+        description: `Includes ${panelBrand}, ${invBrand}, MMS, ACDB/DCDB, Cabling & Net Metering Installation. Originating Quote: ${quote.offer_no} (${quote.pos_name || 'Direct'})`,
+        hsn: '85414011',
+        quantity: 1,
+        unit: 'Set',
+        rate: Math.round((parseFloat(quote.total_price) || 0) / 1.18),
+        tax: 18,
+      }
+    ]);
+  };
+
+  useEffect(() => {
+    fetchQuotations();
+  }, []);
+
+  useEffect(() => {
+    if (preselectedQuotation) {
+      handleSelectQuotation(preselectedQuotation.id);
+    }
+  }, [preselectedQuotation, quotations]);
+
   useEffect(() => {
     if (editData) {
         try {
@@ -175,6 +248,9 @@ export default function InvoiceForm({ editData, onClearEdit }) {
             setItems(parsedItems || [{ id: 1, name: '', description: '', hsn: '', quantity: 1, unit: 'Nos', rate: 0, tax: 18 }]);
             setStep(0);
             setSuccessUrl(null);
+            if (editData.quotation_id) {
+              setSelectedQuotation({ id: editData.quotation_id, offer_no: editData.quotation_no, pos_name: editData.pos_name });
+            }
         } catch(e) {
             console.error('Error loading editData', e);
         }
@@ -228,6 +304,11 @@ export default function InvoiceForm({ editData, onClearEdit }) {
         cgstTotal: getTaxTotal() / 2,
         sgstTotal: getTaxTotal() / 2,
         grandTotal: getGrandTotal(),
+        quotation_id: selectedQuotation?.id || null,
+        quotation_no: selectedQuotation?.offer_no || null,
+        partner_id: selectedQuotation?.partner_id || null,
+        pos_name: selectedQuotation?.pos_name || null,
+        pos_id: selectedQuotation?.pos_id || null,
       };
 
       const response = await fetch(`${API}/api/admin/invoices`, {
@@ -264,6 +345,76 @@ export default function InvoiceForm({ editData, onClearEdit }) {
     switch (step) {
       case 0: return (
         <>
+          {/* Quotation Selection / Linking Section */}
+          <div style={{
+            background: selectedQuotation ? '#F0FDF4' : '#F8FAFC',
+            border: `1.5px solid ${selectedQuotation ? '#86EFAC' : C.border}`,
+            borderRadius: 10,
+            padding: 16,
+            marginBottom: 24
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'between', marginBottom: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: selectedQuotation ? '#166534' : C.navy }}>
+                🔗 Link Existing Quotation (Auto-Convert Lead)
+              </div>
+              {selectedQuotation && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedQuotation(null)}
+                  style={{
+                    fontSize: 11, color: '#DC2626', background: 'none', border: 'none',
+                    fontWeight: 600, cursor: 'pointer', textDecoration: 'underline'
+                  }}
+                >
+                  Unlink Quotation
+                </button>
+              )}
+            </div>
+            <p style={{ fontSize: 11.5, color: C.mid, marginBottom: 12 }}>
+              Select a quotation to automatically link this invoice and mark the originating POS lead as <strong>Converted</strong>.
+            </p>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <select
+                value={selectedQuotation?.id || ''}
+                onChange={(e) => handleSelectQuotation(e.target.value)}
+                style={{
+                  flex: 1, padding: '9px 12px', border: `1.5px solid ${C.border}`,
+                  borderRadius: 7, fontSize: 13, background: 'white', color: C.text,
+                  outline: 'none'
+                }}
+              >
+                <option value="">-- No quotation linked (Stand-alone invoice) --</option>
+                {quotations.map((q) => {
+                  const isConverted = q.status === 'converted' || q.invoice_id;
+                  return (
+                    <option key={q.id} value={q.id}>
+                      {q.offer_no} — {q.customer_name} (₹ {Number(q.total_price || 0).toLocaleString('en-IN')}) — POS: {q.pos_name || 'Admin'} {isConverted ? ' [Converted]' : ' [Pending]'}
+                    </option>
+                  );
+                })}
+              </select>
+              <button
+                type="button"
+                onClick={fetchQuotations}
+                disabled={loadingQuotes}
+                style={{
+                  padding: '9px 12px', background: C.light, color: C.teal, border: `1px solid ${C.border}`,
+                  borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer'
+                }}
+              >
+                {loadingQuotes ? '...' : 'Refresh Quotes'}
+              </button>
+            </div>
+            {selectedQuotation && (
+              <div style={{ marginTop: 10, fontSize: 12, color: '#15803D', fontWeight: 500, display: 'flex', gap: 16 }}>
+                <span>✓ Linked: <strong>{selectedQuotation.offer_no}</strong></span>
+                <span>POS: <strong>{selectedQuotation.pos_name || 'Admin'}</strong></span>
+                <span>Customer: <strong>{selectedQuotation.customer_name}</strong></span>
+                <span>Amount: <strong>₹ {Number(selectedQuotation.total_price || 0).toLocaleString('en-IN')}</strong></span>
+              </div>
+            )}
+          </div>
+
           <SectionHead title="Invoice Details" />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
             <div style={{ flex: '0 0 calc(50% - 6px)', minWidth: 0 }}>
