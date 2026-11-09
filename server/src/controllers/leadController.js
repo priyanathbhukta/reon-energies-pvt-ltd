@@ -318,97 +318,148 @@ router.get('/:id', authenticate, async (req, res) => {
 });
 
 // ─── PATCH /api/leads/:id/stage ─────────────────────────────
-// Update lead stage
-router.patch('/:id/stage', authenticate, requirePermission('leads.update'), async (req, res) => {
+// Update lead stage — Both Admins and POS partners (for their own leads) can update
+router.patch('/:id/stage', authenticate, async (req, res) => {
   const client = await pool.connect();
   try {
     const { id } = req.params;
     const { stage, notes } = req.body;
 
-    const validStages = ['new', 'contacted', 'site_visit_scheduled', 'quotation_sent', 'negotiation', 'converted', 'lost'];
+    const validStages = [
+      'contacted',
+      'quotation_sent',
+      'converted',
+      'site_visit',
+      'site_visit_scheduled',
+      'negotiation',
+      'material_request',
+      'request_sent_to_material_team',
+      'completed',
+      'new',
+      'lost',
+      'pending',
+      'cancelled',
+      'expired',
+    ];
     if (!validStages.includes(stage)) {
       return res.status(400).json({ error: 'Invalid stage' });
     }
 
+    // Normalize aliases
+    let targetStage = stage;
+    if (stage === 'site_visit_scheduled') targetStage = 'site_visit';
+    if (stage === 'request_sent_to_material_team') targetStage = 'material_request';
+
     await client.query('BEGIN');
 
-    // Get current stage
-    const current = await client.query('SELECT stage, partner_id FROM leads WHERE id = $1', [id]);
+    // Get current stage and ownership info
+    const current = await client.query('SELECT stage, partner_id, pos_name, pos_id, user_id FROM leads WHERE id = $1', [id]);
     if (current.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Lead not found' });
     }
 
+    const isAdmin = (req.user.roles || []).includes('super_admin') || (req.user.roles || []).includes('sales_manager');
+    if (!isAdmin) {
+      const partnerRes = await client.query('SELECT id, shop_name, referral_code FROM pos_partners WHERE user_id = $1', [req.user.id]);
+      const partner = partnerRes.rows[0];
+      const isOwner = (partner && (
+        current.rows[0].partner_id === partner.id ||
+        (current.rows[0].pos_name && partner.shop_name && current.rows[0].pos_name.toLowerCase() === partner.shop_name.toLowerCase()) ||
+        (current.rows[0].pos_id && partner.referral_code && current.rows[0].pos_id.toLowerCase() === partner.referral_code.toLowerCase())
+      )) || (current.rows[0].user_id && current.rows[0].user_id === req.user.id);
+
+      if (!isOwner) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'You can only update status for your own leads' });
+      }
+    }
+
     const fromStage = current.rows[0].stage;
     const partnerId = current.rows[0].partner_id;
 
-    // Update lead
-    const updateFields = { stage };
-    if (stage === 'converted') updateFields.converted_at = new Date();
+    // Determine lead_status
+    const isConverted = targetStage === 'converted';
+    const isCompleted = targetStage === 'completed';
+    const newLeadStatus = isConverted ? 'Converted' : (isCompleted ? 'Completed' : 'Pending');
 
     await client.query(
-      `UPDATE leads SET stage = $1, converted_at = $2 WHERE id = $3`,
-      [stage, stage === 'converted' ? new Date() : null, id]
+      `UPDATE leads 
+       SET stage = $1, 
+           lead_status = CASE 
+             WHEN $2 = 'Converted' THEN 'Converted' 
+             WHEN invoice_id IS NOT NULL THEN 'Converted' 
+             ELSE $2 
+           END,
+           converted_at = CASE WHEN $1 = 'converted' AND converted_at IS NULL THEN NOW() ELSE converted_at END,
+           updated_at = NOW() 
+       WHERE id = $3`,
+      [targetStage, newLeadStatus, id]
     );
 
-    // Add to history
+    // Add to history safely with UUID check
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const changedBy = (req.user?.id && uuidRegex.test(req.user.id)) ? req.user.id : null;
     await client.query(
       `INSERT INTO lead_status_history (lead_id, from_stage, to_stage, changed_by, notes)
        VALUES ($1, $2, $3, $4, $5)`,
-      [id, fromStage, stage, req.user.id, notes]
+      [id, fromStage, targetStage, changedBy, notes || `Stage updated to ${targetStage}`]
     );
 
-    // If converted, auto-calculate commission
-    if (stage === 'converted' && partnerId) {
-      const lead = await client.query('SELECT estimated_kw FROM leads WHERE id = $1', [id]);
-      const kw = parseFloat(lead.rows[0]?.estimated_kw) || 0;
+    // If converted and partner exists, auto-calculate commission if not already created
+    if (targetStage === 'converted' && partnerId) {
+      const existingComm = await client.query('SELECT id FROM commissions WHERE lead_id = $1', [id]);
+      if (existingComm.rows.length === 0) {
+        const lead = await client.query('SELECT estimated_kw FROM leads WHERE id = $1', [id]);
+        const kw = parseFloat(lead.rows[0]?.estimated_kw) || 0;
 
-      // Find applicable commission tier
-      const tier = await client.query(
-        `SELECT * FROM commission_tiers
-         WHERE is_active = true AND type = 'fixed_per_kw'
-           AND (min_kw IS NULL OR $1 >= min_kw)
-           AND (max_kw IS NULL OR $1 <= max_kw)
-         ORDER BY rate DESC LIMIT 1`,
-        [kw]
-      );
-
-      if (tier.rows.length > 0) {
-        const amount = kw * parseFloat(tier.rows[0].rate);
-
-        // Create commission record
-        await client.query(
-          `INSERT INTO commissions (partner_id, lead_id, tier_id, amount, kw_installed, status, calculation_details)
-           VALUES ($1, $2, $3, $4, $5, 'pending', $6)`,
-          [partnerId, id, tier.rows[0].id, amount, kw,
-           JSON.stringify({ kw, rate: tier.rows[0].rate, tierName: tier.rows[0].name })]
+        // Find applicable commission tier
+        const tier = await client.query(
+          `SELECT * FROM commission_tiers
+           WHERE is_active = true AND type = 'fixed_per_kw'
+             AND (min_kw IS NULL OR $1 >= min_kw)
+             AND (max_kw IS NULL OR $1 <= max_kw)
+           ORDER BY rate DESC LIMIT 1`,
+          [kw]
         );
 
-        // Credit wallet
-        const wallet = await client.query(
-          'SELECT id, balance FROM wallets WHERE partner_id = $1',
-          [partnerId]
-        );
+        if (tier.rows.length > 0) {
+          const amount = kw * parseFloat(tier.rows[0].rate);
 
-        if (wallet.rows.length > 0) {
-          const newBalance = parseFloat(wallet.rows[0].balance) + amount;
+          // Create commission record
           await client.query(
-            'UPDATE wallets SET balance = $1, total_earned = total_earned + $2 WHERE id = $3',
-            [newBalance, amount, wallet.rows[0].id]
+            `INSERT INTO commissions (partner_id, lead_id, tier_id, amount, kw_installed, status, calculation_details)
+             VALUES ($1, $2, $3, $4, $5, 'pending', $6)`,
+            [partnerId, id, tier.rows[0].id, amount, kw,
+             JSON.stringify({ kw, rate: tier.rows[0].rate, tierName: tier.rows[0].name })]
           );
 
-          await client.query(
-            `INSERT INTO wallet_transactions (wallet_id, type, amount, balance_after, reference_type, reference_id, description)
-             VALUES ($1, 'credit', $2, $3, 'commission', $4, $5)`,
-            [wallet.rows[0].id, amount, newBalance, id,
-             `Commission for ${kw} kW installation`]
+          // Credit wallet
+          const wallet = await client.query(
+            'SELECT id, balance FROM wallets WHERE partner_id = $1',
+            [partnerId]
           );
+
+          if (wallet.rows.length > 0) {
+            const newBalance = parseFloat(wallet.rows[0].balance) + amount;
+            await client.query(
+              'UPDATE wallets SET balance = $1, total_earned = total_earned + $2 WHERE id = $3',
+              [newBalance, amount, wallet.rows[0].id]
+            );
+
+            await client.query(
+              `INSERT INTO wallet_transactions (wallet_id, type, amount, balance_after, reference_type, reference_id, description)
+               VALUES ($1, 'credit', $2, $3, 'commission', $4, $5)`,
+              [wallet.rows[0].id, amount, newBalance, id,
+               `Commission for ${kw} kW installation`]
+            );
+          }
         }
       }
     }
 
     await client.query('COMMIT');
-    res.json({ success: true, message: `Lead stage updated to ${stage}` });
+    res.json({ success: true, message: `Lead stage updated to ${targetStage}`, stage: targetStage, leadStatus: newLeadStatus });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Update stage error:', err.message);

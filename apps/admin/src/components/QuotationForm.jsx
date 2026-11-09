@@ -671,6 +671,33 @@ export default function QuotationForm({ editData, onClearEdit }) {
               )}
             </div>
           </div>
+
+          {/* Company Bank & Payment Details with QR_REON */}
+          <div style={{
+            marginTop: 18, padding: '14px 16px', background: '#F8FAFC',
+            border: `1.5px solid ${C.border}`, borderRadius: 10,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap'
+          }}>
+            <div style={{ flex: '1 1 280px', minWidth: 240 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: C.navy, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Bank &amp; Payment Details
+              </div>
+              <div style={{ fontSize: 12, color: C.text, lineHeight: 1.6 }}>
+                <div><b>A/C Name:</b> REON ENERGIES PRIVATE LIMITED</div>
+                <div><b>Bank:</b> Punjab National Bank (Singur Branch)</div>
+                <div><b>A/C No:</b> 0162202100001274 &nbsp;|&nbsp; <b>IFSC:</b> PUNB0016220</div>
+                <div style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, background: '#E6FFFA', padding: '3px 8px', borderRadius: 5, border: '1px solid #B2F5EA' }}>
+                  <b style={{ color: '#0D9488' }}>UPI ID:</b>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0F766E' }}>8436649991m@pnb</span>
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', background: 'white', padding: '8px 12px', borderRadius: 8, border: `1px solid ${C.border}` }}>
+              <img src="/qr_reon.png" alt="REON UPI QR" style={{ width: 80, height: 80, objectFit: 'contain' }} />
+              <span style={{ fontSize: 10, fontWeight: 700, color: '#0D9488', marginTop: 4 }}>Scan &amp; Pay via UPI</span>
+              <span style={{ fontSize: 9, color: C.mid }}>8436649991m@pnb</span>
+            </div>
+          </div>
         </>
       );
 

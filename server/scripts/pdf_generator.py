@@ -27,7 +27,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table,
-    TableStyle, PageBreak, HRFlowable,
+    TableStyle, PageBreak, HRFlowable, Image as RLImage,
 )
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
@@ -38,6 +38,7 @@ from pypdf import PdfReader, PdfWriter
 _HERE      = Path(__file__).resolve().parent
 LOGO_PATH  = str(_HERE / "REON_ENERGIES.png")
 COVER_PATH = str(_HERE / "cover.png")
+QR_PATH    = str(_HERE / "qr_reon.png")
 
 # Font paths for Linux, Windows, and Mac
 _FONT_CHOICES = [
@@ -815,15 +816,46 @@ def _page_clients(data: dict, S: dict) -> list:
     elems.append(_navy_tbl(hdrs, rows, cw, S, center_cols=[0, 2], bold_col=2))
     elems.append(Spacer(1, 15))
 
-    # ── Bank, GST, Contact Cards ──────────────────────────────────────────────
+    # ── Bank, QR_REON, GST, Contact Cards ─────────────────────────────────────
     bank_text = (
-        "<font color='#1B2D5B' size='9'><b>Bank Details</b></font><br/><br/>"
+        "<font color='#1B2D5B' size='9'><b>Bank Details &amp; Payment</b></font><br/><br/>"
         "<b>Account Name:</b> REON ENERGIES PRIVATE LIMITED<br/>"
         "<b>Bank A/C No:</b> 0162202100001274<br/>"
         "<b>IFSC:</b> PUNB0016220<br/>"
         "<b>Branch:</b> Singur<br/>"
-        "<b>Bank Name:</b> Punjab National Bank"
+        "<b>Bank Name:</b> Punjab National Bank<br/>"
+        "<b>UPI ID:</b> 8436649991m@pnb"
     )
+
+    if os.path.exists(QR_PATH):
+        qr_img = RLImage(QR_PATH, width=1.05 * inch, height=1.05 * inch)
+        qr_caption = Paragraph(
+            "<para align='center'><font color='#0A7A82' size='6.5'><b>Scan to Pay (UPI)</b></font><br/>"
+            "<font color='#1B2D5B' size='6'><b>8436649991m@pnb</b></font></para>",
+            S["body"]
+        )
+        qr_box = Table([[qr_img], [Spacer(1, 2)], [qr_caption]], colWidths=[85])
+        qr_box.setStyle(TableStyle([
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ]))
+    else:
+        qr_box = Paragraph("<b>UPI ID:</b><br/>8436649991m@pnb", S["body"])
+
+    bank_inner_table = Table([
+        [Paragraph(bank_text, S["body"]), qr_box]
+    ], colWidths=[170, 85])
+    bank_inner_table.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
     
     gst_contact_text = (
         "<font color='#1B2D5B' size='9'><b>GST Details</b></font><br/><br/>"
@@ -834,9 +866,9 @@ def _page_clients(data: dict, S: dict) -> list:
         "<b>Website:</b> reonenergy.in"
     )
 
-    card_cw = [CONTENT_W * 0.48, CONTENT_W * 0.04, CONTENT_W * 0.48]
+    card_cw = [CONTENT_W * 0.54, CONTENT_W * 0.02, CONTENT_W * 0.44]
     card_table = Table([
-        [Paragraph(bank_text, S["body"]), "", Paragraph(gst_contact_text, S["body"])]
+        [bank_inner_table, "", Paragraph(gst_contact_text, S["body"])]
     ], colWidths=card_cw)
 
     card_table.setStyle(TableStyle([

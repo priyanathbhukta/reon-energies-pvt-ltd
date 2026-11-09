@@ -1736,13 +1736,14 @@ function LeadsTab({ leads, posPartners, onRefresh, headers, formatDate, onSelect
     };
 
     const STAGE_CONFIG = {
-        new: { label: 'New', color: 'bg-blue-100 text-blue-700' },
-        contacted: { label: 'Contacted', color: 'bg-yellow-100 text-yellow-700' },
-        site_visit_scheduled: { label: 'Site Visit', color: 'bg-purple-100 text-purple-700' },
-        quotation_sent: { label: 'Quotation Sent', color: 'bg-indigo-100 text-indigo-700' },
-        negotiation: { label: 'Negotiation', color: 'bg-orange-100 text-orange-700' },
-        converted: { label: 'Converted', color: 'bg-emerald-100 text-emerald-700' },
-        lost: { label: 'Lost', color: 'bg-red-100 text-red-700' },
+        contacted: { label: '1. Contacted', color: 'bg-blue-100 text-blue-700' },
+        quotation_sent: { label: '2. Quotation sent', color: 'bg-indigo-100 text-indigo-700' },
+        converted: { label: '3. Converted (Payment Credited)', color: 'bg-emerald-100 text-emerald-800' },
+        site_visit: { label: '4. Site Visit', color: 'bg-amber-100 text-amber-800' },
+        site_visit_scheduled: { label: '4. Site Visit', color: 'bg-amber-100 text-amber-800' },
+        negotiation: { label: '5. Negotiation', color: 'bg-orange-100 text-orange-800' },
+        material_request: { label: '6. Request sent to Material team', color: 'bg-purple-100 text-purple-700' },
+        completed: { label: '7. Completed', color: 'bg-teal-100 text-teal-800' },
     };
 
     const handleStageUpdate = async (leadId, newStage) => {

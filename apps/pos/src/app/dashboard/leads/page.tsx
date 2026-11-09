@@ -22,7 +22,18 @@ import {
 } from 'lucide-react';
 import api from '@/lib/api';
 
-type LeadStage = 'new' | 'contacted' | 'site_visit_scheduled' | 'quotation_sent' | 'negotiation' | 'converted' | 'lost';
+type LeadStage =
+  | 'contacted'
+  | 'quotation_sent'
+  | 'converted'
+  | 'site_visit'
+  | 'site_visit_scheduled'
+  | 'negotiation'
+  | 'material_request'
+  | 'request_sent_to_material_team'
+  | 'completed'
+  | 'new'
+  | 'lost';
 
 interface Lead {
   id: string;
@@ -31,7 +42,7 @@ interface Lead {
   address: string;
   estimatedKw: number;
   electricityBillAmount: number;
-  stage: LeadStage;
+  stage: string;
   priority: 'low' | 'medium' | 'high';
   source: string;
   createdAt: string;
@@ -42,13 +53,27 @@ interface Lead {
   conversionDate?: string;
 }
 
-const stageConfig: Record<LeadStage, { label: string; color: string; bgColor: string }> = {
-  new: { label: 'New', color: 'text-emerald-500', bgColor: 'bg-emerald-500/10' },
+const ORDERED_STAGES = [
+  { key: 'contacted', label: '1. Contacted', color: 'text-blue-500', bgColor: 'bg-blue-500/10' },
+  { key: 'quotation_sent', label: '2. Quotation sent', color: 'text-indigo-500', bgColor: 'bg-indigo-500/10' },
+  { key: 'converted', label: '3. Converted (Payment Credited)', color: 'text-emerald-600', bgColor: 'bg-emerald-500/10' },
+  { key: 'site_visit', label: '4. Site Visit', color: 'text-amber-500', bgColor: 'bg-amber-500/10' },
+  { key: 'negotiation', label: '5. Negotiation', color: 'text-orange-500', bgColor: 'bg-orange-500/10' },
+  { key: 'material_request', label: '6. Request sent to Material team', color: 'text-purple-500', bgColor: 'bg-purple-500/10' },
+  { key: 'completed', label: '7. Completed', color: 'text-teal-600', bgColor: 'bg-teal-500/10' },
+];
+
+const stageConfig: Record<string, { label: string; color: string; bgColor: string }> = {
   contacted: { label: 'Contacted', color: 'text-blue-500', bgColor: 'bg-blue-500/10' },
-  site_visit_scheduled: { label: 'Site Visit', color: 'text-solar-600 dark:text-solar-400', bgColor: 'bg-solar-500/10' },
-  quotation_sent: { label: 'Quotation Sent', color: 'text-purple-500', bgColor: 'bg-purple-500/10' },
+  quotation_sent: { label: 'Quotation sent', color: 'text-indigo-500', bgColor: 'bg-indigo-500/10' },
+  converted: { label: 'Converted (Payment Credited)', color: 'text-emerald-600', bgColor: 'bg-emerald-500/10' },
+  site_visit: { label: 'Site Visit', color: 'text-amber-500', bgColor: 'bg-amber-500/10' },
+  site_visit_scheduled: { label: 'Site Visit', color: 'text-amber-500', bgColor: 'bg-amber-500/10' },
   negotiation: { label: 'Negotiation', color: 'text-orange-500', bgColor: 'bg-orange-500/10' },
-  converted: { label: 'Converted', color: 'text-emerald-600', bgColor: 'bg-emerald-600/10' },
+  material_request: { label: 'Request to Material team', color: 'text-purple-500', bgColor: 'bg-purple-500/10' },
+  request_sent_to_material_team: { label: 'Request to Material team', color: 'text-purple-500', bgColor: 'bg-purple-500/10' },
+  completed: { label: 'Completed', color: 'text-teal-600', bgColor: 'bg-teal-500/10' },
+  new: { label: 'New', color: 'text-emerald-500', bgColor: 'bg-emerald-500/10' },
   lost: { label: 'Lost', color: 'text-red-500', bgColor: 'bg-red-500/10' },
 };
 
@@ -66,6 +91,24 @@ export default function LeadsPage() {
   const [selectedStage, setSelectedStage] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
+  const [updatingLeadId, setUpdatingLeadId] = useState<string | null>(null);
+
+  const handleStageChange = async (leadId: string, newStage: string) => {
+    try {
+      setUpdatingLeadId(leadId);
+      const res = await api.patch(`/leads/${leadId}/stage`, { stage: newStage });
+      if (res.data?.success) {
+        setLeads((prev) =>
+          prev.map((l) => (l.id === leadId ? { ...l, stage: newStage } : l))
+        );
+      }
+    } catch (err: any) {
+      console.error('Failed to update stage:', err);
+      alert(err.response?.data?.error || 'Failed to update stage');
+    } finally {
+      setUpdatingLeadId(null);
+    }
+  };
 
   useEffect(() => {
     fetchLeads();
@@ -162,24 +205,24 @@ export default function LeadsPage() {
           className={cn(
             'px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all',
             selectedStage === 'all'
-              ? 'bg-foreground text-background'
+              ? 'bg-foreground text-background font-semibold'
               : 'text-muted-foreground hover:text-foreground hover:bg-accent'
           )}
         >
           All ({leads.length})
         </button>
-        {Object.entries(stageConfig).map(([key, config]) => (
+        {ORDERED_STAGES.map((st) => (
           <button
-            key={key}
-            onClick={() => setSelectedStage(key)}
+            key={st.key}
+            onClick={() => setSelectedStage(st.key)}
             className={cn(
               'px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all',
-              selectedStage === key
-                ? `${config.bgColor} ${config.color}`
+              selectedStage === st.key
+                ? `${st.bgColor} ${st.color} font-semibold ring-1 ring-current`
                 : 'text-muted-foreground hover:text-foreground hover:bg-accent'
             )}
           >
-            {config.label} ({stageCount(key)})
+            {st.label} ({stageCount(st.key)})
           </button>
         ))}
       </div>
@@ -336,9 +379,27 @@ export default function LeadsPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={cn('text-xs font-medium px-2.5 py-1 rounded-full', stage.bgColor, stage.color)}>
-                          {stage.label}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <select
+                            value={
+                              lead.stage === 'site_visit_scheduled' ? 'site_visit' :
+                              lead.stage === 'request_sent_to_material_team' ? 'material_request' :
+                              lead.stage
+                            }
+                            onChange={(e) => handleStageChange(lead.id, e.target.value)}
+                            disabled={updatingLeadId === lead.id}
+                            className="text-xs font-medium rounded-lg border border-border bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer disabled:opacity-50"
+                          >
+                            {ORDERED_STAGES.map((st) => (
+                              <option key={st.key} value={st.key}>
+                                {st.label}
+                              </option>
+                            ))}
+                          </select>
+                          {updatingLeadId === lead.id && (
+                            <Loader2 className="w-3 h-3 text-emerald-500 animate-spin" />
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 hidden lg:table-cell">
                         <div className="flex items-center gap-1 text-sm text-foreground">
@@ -402,19 +463,24 @@ export default function LeadsPage() {
       {/* Kanban View */}
       {viewMode === 'kanban' && (
         <div className="flex gap-4 overflow-x-auto pb-4">
-          {Object.entries(stageConfig).map(([key, config]) => {
-            const stageLeads = filteredLeads.filter((l) => l.stage === key);
+          {ORDERED_STAGES.map((st) => {
+            const stageLeads = filteredLeads.filter((l) => {
+              const currentStage =
+                l.stage === 'site_visit_scheduled' ? 'site_visit' :
+                l.stage === 'request_sent_to_material_team' ? 'material_request' : l.stage;
+              return currentStage === st.key;
+            });
             return (
               <div
-                key={key}
+                key={st.key}
                 className="flex-shrink-0 w-72 bg-muted/30 rounded-xl border border-border"
               >
                 <div className="p-3 border-b border-border">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className={cn('w-2 h-2 rounded-full', config.color.replace('text-', 'bg-'))} />
+                      <span className={cn('w-2 h-2 rounded-full', st.color.replace('text-', 'bg-'))} />
                       <span className="text-sm font-semibold text-foreground">
-                        {config.label}
+                        {st.label}
                       </span>
                     </div>
                     <span className="text-xs font-medium text-muted-foreground bg-background px-2 py-0.5 rounded-full">
@@ -428,16 +494,28 @@ export default function LeadsPage() {
                       key={lead.id}
                       className="block p-3 bg-card rounded-lg border border-border hover:shadow-md transition-all group"
                     >
-                      <p className="text-sm font-medium text-foreground">
-                        {lead.customerName}
-                      </p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold text-foreground">
+                          {lead.customerName}
+                        </p>
+                        {lead.quotationNumber && (
+                          <span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.2 rounded border border-primary/20">
+                            {lead.quotationNumber}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
                         <Phone className="w-3 h-3" />
                         {lead.mobile}
                       </div>
-                      <div className="flex items-center justify-between mt-2">
+                      {lead.invoiceNumber && (
+                        <div className="mt-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 inline-block font-mono">
+                          Inv: {lead.invoiceNumber}
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/50">
                         <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Zap className="w-3 h-3 text-solar-500" />
+                          <Zap className="w-3.5 h-3.5 text-solar-500" />
                           {lead.estimatedKw || 0} kW
                         </div>
                         <div className="flex items-center gap-1">
@@ -447,11 +525,29 @@ export default function LeadsPage() {
                           </span>
                         </div>
                       </div>
+                      <div className="mt-2">
+                        <select
+                          value={
+                            lead.stage === 'site_visit_scheduled' ? 'site_visit' :
+                            lead.stage === 'request_sent_to_material_team' ? 'material_request' :
+                            lead.stage
+                          }
+                          onChange={(e) => handleStageChange(lead.id, e.target.value)}
+                          disabled={updatingLeadId === lead.id}
+                          className="w-full text-[11px] font-medium rounded border border-border bg-background px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        >
+                          {ORDERED_STAGES.map((s) => (
+                            <option key={s.key} value={s.key}>
+                              {s.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                   ))}
                   {stageLeads.length === 0 && (
                     <p className="text-xs text-muted-foreground text-center py-6">
-                      No leads
+                      No leads in this stage
                     </p>
                   )}
                 </div>

@@ -45,6 +45,7 @@ export interface RegisterData {
   state: string;
   district: string;
   pincode?: string;
+  referredByCode?: string;
 }
 
 export const useAuthStore = create<AuthState>()(

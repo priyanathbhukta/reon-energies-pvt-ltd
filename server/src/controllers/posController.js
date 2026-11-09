@@ -34,7 +34,10 @@ router.post('/register', async (req, res) => {
     const {
       fullName, mobile, email, password,
       shopName, gstNumber, address, state, district, pincode,
+      referredByCode, ref,
     } = req.body;
+
+    const incomingReferralCode = (referredByCode || ref || '').toString().trim().toUpperCase() || null;
 
     // ── Validation ──────────────────────────────────────────
     if (!fullName || !mobile || !email || !password || !shopName || !address || !state || !district) {
@@ -99,10 +102,10 @@ router.post('/register', async (req, res) => {
 
     const partnerResult = await client.query(
       `INSERT INTO pos_partners
-         (user_id, pos_id, shop_name, gst_number, address, state, district, pincode, referral_code, referral_slug, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending')
+         (user_id, pos_id, shop_name, gst_number, address, state, district, pincode, referral_code, referral_slug, referred_by_code, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'pending')
        RETURNING id`,
-      [userId, mobile, shopName.trim(), gstNumber || null, address.trim(), state.trim(), district.trim(), pincode || null, referralCode, referralSlug]
+      [userId, mobile, shopName.trim(), gstNumber || null, address.trim(), state.trim(), district.trim(), pincode || null, referralCode, referralSlug, incomingReferralCode]
     );
     const partnerId = partnerResult.rows[0].id;
 
@@ -430,6 +433,75 @@ router.get('/profile', authenticate, async (req, res) => {
 // ─── Helper: Validate UUID ─────────────────────────────────
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isValidUuid = (val) => typeof val === 'string' && uuidRegex.test(val);
+
+// ─── GET /api/pos/referrals ──────────────────────────────────
+// POS Partner: Get partner referral info, link, and list of referred partner businesses
+router.get('/referrals', authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    let partnerRes = { rows: [] };
+    if (isValidUuid(userId)) {
+      partnerRes = await pool.query(
+        'SELECT id, shop_name, referral_code, referral_slug FROM pos_partners WHERE user_id = $1',
+        [userId]
+      );
+    }
+
+    if (partnerRes.rows.length === 0) {
+      // Fallback: check if id is partner id directly
+      if (isValidUuid(userId)) {
+        partnerRes = await pool.query(
+          'SELECT id, shop_name, referral_code, referral_slug FROM pos_partners WHERE id = $1',
+          [userId]
+        );
+      }
+    }
+
+    const partner = partnerRes.rows[0];
+    const referralCode = partner?.referral_code || (partner?.id ? 'REON-' + partner.id.slice(0, 6).toUpperCase() : 'REON-PARTNER');
+    const referralLink = `https://pos.reonenergy.in/register?ref=${referralCode}`;
+
+    // Fetch partners registered using this referral code
+    const referredPartnersRes = await pool.query(
+      `SELECT pp.id, pp.shop_name, pp.state, pp.district, pp.status, pp.created_at, u.full_name
+       FROM pos_partners pp
+       LEFT JOIN users u ON pp.user_id = u.id
+       WHERE pp.referred_by_code = $1 AND pp.deleted_at IS NULL
+       ORDER BY pp.created_at DESC`,
+      [referralCode]
+    );
+
+    const referredPartners = referredPartnersRes.rows.map((r) => ({
+      id: r.id,
+      shopName: r.shop_name || 'Retail Partner',
+      ownerName: r.full_name || 'Store Owner',
+      location: [r.district, r.state].filter(Boolean).join(', ') || 'India',
+      status: r.status,
+      dateJoined: r.created_at,
+      reward: r.status === 'active' ? '₹1,000 Credited' : 'Pending Activation',
+      isConverted: r.status === 'active',
+    }));
+
+    const totalReferrals = referredPartners.length;
+    const successfulConversions = referredPartners.filter((p) => p.isConverted).length;
+    const totalEarnings = successfulConversions * 1000;
+
+    res.json({
+      success: true,
+      referralCode,
+      referralLink,
+      stats: {
+        totalReferrals,
+        successfulConversions,
+        totalEarnings,
+      },
+      referredPartners,
+    });
+  } catch (err) {
+    console.error('POS referrals error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch referral data' });
+  }
+});
 
 // ─── GET /api/pos/dashboard-stats or /api/v2/pos/dashboard-stats ──
 router.get('/dashboard-stats', authenticate, async (req, res) => {

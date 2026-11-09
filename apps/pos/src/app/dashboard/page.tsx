@@ -56,6 +56,16 @@ interface LeadRecord {
   stage: string;
 }
 
+const LEAD_STAGES = [
+  { key: 'contacted', label: '1. Contacted', color: 'text-blue-600 bg-blue-500/10 border-blue-500/20' },
+  { key: 'quotation_sent', label: '2. Quotation sent', color: 'text-indigo-600 bg-indigo-500/10 border-indigo-500/20' },
+  { key: 'converted', label: '3. Converted (Payment Credited)', color: 'text-emerald-700 bg-emerald-500/10 border-emerald-500/20' },
+  { key: 'site_visit', label: '4. Site Visit', color: 'text-amber-700 bg-amber-500/10 border-amber-500/20' },
+  { key: 'negotiation', label: '5. Negotiation', color: 'text-orange-700 bg-orange-500/10 border-orange-500/20' },
+  { key: 'material_request', label: '6. Request to Material Team', color: 'text-purple-700 bg-purple-500/10 border-purple-500/20' },
+  { key: 'completed', label: '7. Completed', color: 'text-teal-700 bg-teal-500/10 border-teal-500/20' },
+];
+
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
@@ -85,6 +95,36 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [updatingLeadId, setUpdatingLeadId] = useState<string | null>(null);
+
+  const handleStageChange = async (leadId: string, newStage: string) => {
+    try {
+      setUpdatingLeadId(leadId);
+      const res = await api.patch(`/leads/${leadId}/stage`, { stage: newStage });
+      if (res.data?.success) {
+        setLeads((prev) =>
+          prev.map((l) => {
+            if (l.id === leadId) {
+              const isConverted = newStage === 'converted' || newStage === 'completed';
+              return {
+                ...l,
+                stage: newStage,
+                leadStatus: isConverted ? 'Converted' : l.leadStatus === 'Converted' ? 'Converted' : 'Pending',
+                conversionDate: isConverted && !l.conversionDate ? new Date().toISOString() : l.conversionDate,
+              };
+            }
+            return l;
+          })
+        );
+        fetchDashboardData(false);
+      }
+    } catch (err: any) {
+      console.error('Failed to update stage:', err);
+      alert(err.response?.data?.error || 'Failed to update lead stage');
+    } finally {
+      setUpdatingLeadId(null);
+    }
+  };
 
   const fetchDashboardData = async (showLoading = true) => {
     if (showLoading) setIsLoading(true);
@@ -375,22 +415,23 @@ export default function DashboardPage() {
                 <th className="py-3 px-4">Quotation Number</th>
                 <th className="py-3 px-4">Quotation Date</th>
                 <th className="py-3 px-4 text-right">Quotation Amount</th>
-                <th className="py-3 px-4 text-center">Lead Status</th>
-                <th className="py-3 px-4">Invoice Number</th>
+                <th className="py-3 px-4">Lead Stage (POS Action)</th>
+                <th className="py-3 px-4 text-center">Status</th>
+                <th className="py-3 px-4">Admin Invoice</th>
                 <th className="py-3 px-4">Conversion Date</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-muted-foreground">
+                  <td colSpan={10} className="py-12 text-center text-muted-foreground">
                     <RefreshCw className="w-6 h-6 animate-spin mx-auto text-emerald-500 mb-2" />
                     Loading lead and quotation records...
                   </td>
                 </tr>
               ) : filteredLeads.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-muted-foreground">
+                  <td colSpan={10} className="py-12 text-center text-muted-foreground">
                     <FileText className="w-8 h-8 mx-auto text-muted-foreground opacity-40 mb-2" />
                     {leads.length === 0 ? (
                       <div>
@@ -440,6 +481,30 @@ export default function DashboardPage() {
                     <td className="py-3 px-4 text-right font-semibold text-foreground font-mono">
                       {formatCurrency(lead.quotationAmount)}
                     </td>
+                    {/* Lead Stage (POS Editable) */}
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-1.5">
+                        <select
+                          value={
+                            lead.stage === 'site_visit_scheduled' ? 'site_visit' :
+                            lead.stage === 'request_sent_to_material_team' ? 'material_request' :
+                            (lead.stage || (lead.leadStatus === 'Converted' ? 'converted' : 'quotation_sent'))
+                          }
+                          onChange={(e) => handleStageChange(lead.id, e.target.value)}
+                          disabled={updatingLeadId === lead.id}
+                          className="text-[11px] font-medium bg-background border border-border rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer disabled:opacity-50"
+                        >
+                          {LEAD_STAGES.map((st) => (
+                            <option key={st.key} value={st.key}>
+                              {st.label}
+                            </option>
+                          ))}
+                        </select>
+                        {updatingLeadId === lead.id && (
+                          <RefreshCw className="w-3 h-3 text-emerald-500 animate-spin" />
+                        )}
+                      </div>
+                    </td>
                     {/* Lead Status */}
                     <td className="py-3 px-4 text-center">
                       {getStatusBadge(lead.leadStatus)}
@@ -447,11 +512,18 @@ export default function DashboardPage() {
                     {/* Invoice Number */}
                     <td className="py-3 px-4">
                       {lead.invoiceNumber ? (
-                        <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded text-[11px] border border-emerald-500/20">
-                          {lead.invoiceNumber}
-                        </span>
+                        <div className="flex flex-col">
+                          <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded text-[11px] border border-emerald-500/20 inline-block w-fit">
+                            {lead.invoiceNumber}
+                          </span>
+                          {lead.invoiceAmount > 0 && (
+                            <span className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                              {formatCurrency(lead.invoiceAmount)}
+                            </span>
+                          )}
+                        </div>
                       ) : (
-                        <span className="text-muted-foreground italic text-[11px]">Not generated</span>
+                        <span className="text-muted-foreground italic text-[11px]">Awaiting Admin</span>
                       )}
                     </td>
                     {/* Conversion Date */}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -28,6 +28,7 @@ import {
   Camera,
   Banknote,
   Info,
+  Gift,
 } from 'lucide-react';
 
 // ── Constants ────────────────────────────────────────────────
@@ -256,7 +257,18 @@ export default function RegisterPage() {
     state: '',
     district: '',
     pincode: '',
+    referredByCode: '',
   });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get('ref');
+      if (ref) {
+        setFormData((prev) => ({ ...prev, referredByCode: ref.trim().toUpperCase() }));
+      }
+    }
+  }, []);
 
   const updateField = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -323,6 +335,7 @@ export default function RegisterPage() {
         state: formData.state,
         district: formData.district.trim(),
         pincode: formData.pincode.trim() || undefined,
+        referredByCode: formData.referredByCode.trim() || undefined,
       });
 
       router.push(`/register/success?code=${result?.referralCode || ''}`);
@@ -483,6 +496,14 @@ export default function RegisterPage() {
         placeholder="6-digit pincode"
         maxLength={6}
       />
+
+      <InputField
+        label="Referred by Partner Code (Optional)" id="reg-referredby" icon={Gift}
+        value={formData.referredByCode}
+        onChange={(v) => updateField('referredByCode', v.toUpperCase())}
+        placeholder="e.g. REON-ABC1234"
+        hint="If you were invited by an existing REON POS Partner"
+      />
     </div>
   );
 
@@ -510,6 +531,7 @@ export default function RegisterPage() {
             { label: 'GST Number', value: formData.gstNumber || 'Not provided' },
             { label: 'Address', value: formData.address },
             { label: 'Location', value: `${formData.district}, ${formData.state}${formData.pincode ? ' – ' + formData.pincode : ''}` },
+            ...(formData.referredByCode ? [{ label: 'Referred By Partner', value: formData.referredByCode }] : []),
           ],
           step: 1,
         },
