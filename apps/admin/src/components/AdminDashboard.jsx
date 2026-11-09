@@ -11,7 +11,7 @@ import {
     ArrowUpRight, ArrowDownRight, Filter,
     LayoutGrid, MessageSquare, Image, FileText,
     Plus, X, Save, Edit2, Star, Calculator, ClipboardList, FileDown,
-    Briefcase, FolderOpen, Building2
+    Briefcase, FolderOpen, Building2, ChevronDown, Building
 } from 'lucide-react'
 import QuotationForm from './QuotationForm'
 import InvoiceForm from './InvoiceForm'
@@ -95,8 +95,8 @@ export default function AdminDashboard() {
                 fetch(`${API}/api/content/testimonials`, { headers, cache: 'no-store' }),
                 fetch(`${API}/api/content/gallery`, { headers, cache: 'no-store' }),
                 fetch(`${API}/api/content/directors`, { headers, cache: 'no-store' }),
-                fetch(`${API}/api/pos/partners?limit=100`, { headers, cache: 'no-store' }),
-                fetch(`${API}/api/leads?limit=100`, { headers, cache: 'no-store' }),
+                fetch(`${API}/api/pos/partners?limit=250`, { headers, cache: 'no-store' }),
+                fetch(`${API}/api/leads?limit=1000`, { headers, cache: 'no-store' }),
             ])
             if (statsRes.status === 401) { localStorage.removeItem('reon_admin_token'); router.push('/login'); return }
             
@@ -320,7 +320,7 @@ export default function AdminDashboard() {
                     )}
 
                     {/* Tab Content */}
-                    <div className="max-w-6xl mx-auto">
+                    <div className="w-full max-w-[1440px] mx-auto">
                         {activeTab === 'enquiries' && <EnquiriesTab {...{ filtered, filter, setFilter, searchTerm, setSearchTerm, expandedRow, setExpandedRow, updateStatus, deleteEnquiry, formatDate, formatCurrency, enqFromDate, setEnqFromDate, enqToDate, setEnqToDate, enqSearchHistory, setEnqSearchHistory, addToEnqHistory }} />}
                         {activeTab === 'pos_partners' && <PosPartnersTab partners={posPartners} onRefresh={fetchAll} headers={headers} formatDate={formatDate} />}
                         {activeTab === 'leads' && (
@@ -1711,7 +1711,7 @@ function GeneratedDocumentsTab({ onEditInvoice, onEditQuotation }) {
 
 // ========== POS LEADS TAB ==========
 function LeadsTab({ leads, posPartners, onRefresh, headers, formatDate, onSelectQuotationForInvoice }) {
-    const [viewMode, setViewMode] = useState('all'); // 'all' | 'pos_wise' | 'pending_quotes' | 'converted_quotes'
+    const [viewMode, setViewMode] = useState('all'); // 'all' | 'pos_wise'
     const [selectedPartnerId, setSelectedPartnerId] = useState('all');
     const [stageFilter, setStageFilter] = useState('all');
     const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'pending' | 'converted'
@@ -1745,13 +1745,6 @@ function LeadsTab({ leads, posPartners, onRefresh, headers, formatDate, onSelect
         lost: { label: 'Lost', color: 'bg-red-100 text-red-700' },
     };
 
-    const PRIORITY_CONFIG = {
-        low: 'bg-gray-100 text-gray-600',
-        medium: 'bg-blue-50 text-blue-600',
-        high: 'bg-orange-50 text-orange-600',
-        urgent: 'bg-red-50 text-red-600',
-    };
-
     const handleStageUpdate = async (leadId, newStage) => {
         try {
             await fetch(`${API}/api/leads/${leadId}/stage`, {
@@ -1765,24 +1758,84 @@ function LeadsTab({ leads, posPartners, onRefresh, headers, formatDate, onSelect
         }
     };
 
-    // Calculate aggregated database metrics across all POS users
+    // Helper: Identify whether a lead originated from Admin (Direct) or a POS Partner
+    const isLeadAdmin = (lead) => {
+        const pName = (lead.posName || '').toLowerCase().trim();
+        const pShop = (lead.partnerShopName || '').toLowerCase().trim();
+        const pId = (lead.posId || '').toLowerCase().trim();
+        return pName === 'admin' || pShop === 'admin' || pId === 'admin' ||
+               (!lead.partnerId && !lead.posId && (!lead.partnerShopName || pShop === 'admin') && (!lead.posName || pName === 'admin'));
+    };
+
+    const getLeadShopName = (lead) => {
+        if (isLeadAdmin(lead)) return 'REON Head Office';
+        return lead.partnerShopName || lead.posName || 'POS Partner';
+    };
+
+    const getLeadPosId = (lead) => {
+        if (isLeadAdmin(lead)) return 'HQ-DIRECT';
+        return lead.posId || lead.partnerReferralCode || '';
+    };
+
+    const getLeadOwner = (lead) => {
+        if (isLeadAdmin(lead)) return 'Admin Direct';
+        return lead.partnerOwnerName || '';
+    };
+
+    // Calculate aggregated metrics
     const totalLeadsCount = leads.length;
-    const convertedLeadsCount = leads.filter(l => l.stage === 'converted' || l.leadStatus === 'Converted' || l.invoiceNumber || l.invoiceNo).length;
+    const convertedLeadsCount = leads.filter(l => l.stage === 'converted' || l.leadStatus === 'Converted' || !!l.invoiceNumber || !!l.invoiceNo).length;
     const pendingLeadsCount = totalLeadsCount - convertedLeadsCount;
     const conversionPercentage = totalLeadsCount > 0 ? ((convertedLeadsCount / totalLeadsCount) * 100).toFixed(1) : 0;
     const totalQuotationValue = leads.reduce((sum, l) => sum + (parseFloat(l.quotationAmount) || 0), 0);
     const convertedBusinessValue = leads
-        .filter(l => l.stage === 'converted' || l.leadStatus === 'Converted' || l.invoiceNumber || l.invoiceNo)
+        .filter(l => l.stage === 'converted' || l.leadStatus === 'Converted' || !!l.invoiceNumber || !!l.invoiceNo)
         .reduce((sum, l) => sum + (parseFloat(l.invoiceAmount) || 0), 0);
+
+    const adminLeadsCount = leads.filter(isLeadAdmin).length;
+    const posPartnerLeadsCount = totalLeadsCount - adminLeadsCount;
+
+    // Build active partner map for dropdown filter
+    const activePartnerMap = new Map();
+    leads.forEach(l => {
+        if (!isLeadAdmin(l)) {
+            const key = (l.partnerShopName || l.posName || '').trim();
+            if (key) {
+                if (!activePartnerMap.has(key)) {
+                    activePartnerMap.set(key, {
+                        shopName: key,
+                        posId: l.posId || '',
+                        partnerId: l.partnerId || '',
+                        ownerName: l.partnerOwnerName || '',
+                        quoteCount: 0
+                    });
+                }
+                activePartnerMap.get(key).quoteCount++;
+            }
+        }
+    });
+    const activePartnersList = Array.from(activePartnerMap.values()).sort((a, b) => b.quoteCount - a.quoteCount);
+    const otherPartnersList = (posPartners || []).filter(p => !activePartnerMap.has(p.shop_name));
 
     // Multi-filtering logic
     const filteredLeads = leads.filter(l => {
-        // POS Partner filter
+        const isAdmin = isLeadAdmin(l);
+
+        // POS Partner / Source filter
         if (selectedPartnerId !== 'all') {
-            const matchesPartner = (l.partnerId && l.partnerId === selectedPartnerId) ||
-                                   (l.partnerShopName && l.partnerShopName === selectedPartnerId) ||
-                                   (l.posName && l.posName === selectedPartnerId);
-            if (!matchesPartner) return false;
+            if (selectedPartnerId === 'admin') {
+                if (!isAdmin) return false;
+            } else if (selectedPartnerId === 'all_pos') {
+                if (isAdmin) return false;
+            } else {
+                const target = selectedPartnerId.toLowerCase().trim();
+                const lShop = (l.partnerShopName || l.posName || '').toLowerCase().trim();
+                const lId = (l.partnerId || '').toLowerCase().trim();
+                const lPosId = (l.posId || '').toLowerCase().trim();
+                if (lShop !== target && lId !== target && lPosId !== target) {
+                    return false;
+                }
+            }
         }
 
         // Lead Status filter (Pending / Converted)
@@ -1801,12 +1854,14 @@ function LeadsTab({ leads, posPartners, onRefresh, headers, formatDate, onSelect
         }
 
         // Customer & text search filter
-        if (searchTerm) {
-            const term = searchTerm.toLowerCase();
+        if (searchTerm.trim()) {
+            const term = searchTerm.trim().toLowerCase();
             const matchesCustomer = (l.customerName || '').toLowerCase().includes(term) ||
                                     (l.mobile || '').includes(term) ||
                                     (l.partnerShopName || '').toLowerCase().includes(term) ||
-                                    (l.posName || '').toLowerCase().includes(term);
+                                    (l.posName || '').toLowerCase().includes(term) ||
+                                    (l.address || '').toLowerCase().includes(term) ||
+                                    (l.posId || '').toLowerCase().includes(term);
             if (!matchesCustomer) return false;
         }
 
@@ -1826,23 +1881,56 @@ function LeadsTab({ leads, posPartners, onRefresh, headers, formatDate, onSelect
     });
 
     // POS-Wise Aggregated Performance
-    const posWisePerformance = (posPartners || []).map(p => {
-        const partnerLeads = leads.filter(l => 
-            (l.partnerId && l.partnerId === p.id) ||
-            (l.partnerShopName && l.partnerShopName === p.shop_name) ||
-            (l.posName && l.posName === p.shop_name) ||
-            (l.posId && l.posId === p.referral_code)
-        );
+    const adminLeads = leads.filter(isLeadAdmin);
+    const adminConvertedLeads = adminLeads.filter(l => l.stage === 'converted' || l.leadStatus === 'Converted' || !!l.invoiceNumber || !!l.invoiceNo);
+    const adminQuoteVal = adminLeads.reduce((sum, l) => sum + (parseFloat(l.quotationAmount) || 0), 0);
+    const adminBizVal = adminConvertedLeads.reduce((sum, l) => sum + (parseFloat(l.invoiceAmount) || 0), 0);
+    const adminConvRate = adminLeads.length > 0 ? ((adminConvertedLeads.length / adminLeads.length) * 100).toFixed(1) : 0;
+
+    const hqPerformanceRow = {
+        id: 'hq-admin-direct',
+        shopName: 'REON Head Office',
+        posId: 'HQ-DIRECT',
+        ownerName: 'Admin Direct Quotations',
+        totalLeads: adminLeads.length,
+        pendingLeads: adminLeads.length - adminConvertedLeads.length,
+        convertedLeads: adminConvertedLeads.length,
+        conversionRate: adminConvRate,
+        totalQuotationValue: adminQuoteVal,
+        convertedBusinessValue: adminBizVal,
+        isHq: true,
+    };
+
+    // Combine registered posPartners with any partner found in leads
+    const partnerIdMap = new Map();
+    (posPartners || []).forEach(p => {
+        partnerIdMap.set(p.shop_name?.toLowerCase(), p);
+    });
+
+    const partnerRows = [];
+    const processedShops = new Set();
+
+    // First process partners from posPartners list
+    (posPartners || []).forEach(p => {
+        const pShopLower = p.shop_name?.toLowerCase();
+        processedShops.add(pShopLower);
+        const partnerLeads = leads.filter(l => {
+            if (isLeadAdmin(l)) return false;
+            return (l.partnerId && l.partnerId === p.id) ||
+                   (l.partnerShopName && l.partnerShopName.toLowerCase() === pShopLower) ||
+                   (l.posName && l.posName.toLowerCase() === pShopLower) ||
+                   (l.posId && l.posId === p.referral_code);
+        });
         const total = partnerLeads.length;
-        const converted = partnerLeads.filter(l => l.stage === 'converted' || l.leadStatus === 'Converted' || l.invoiceNumber || l.invoiceNo).length;
+        const converted = partnerLeads.filter(l => l.stage === 'converted' || l.leadStatus === 'Converted' || !!l.invoiceNumber || !!l.invoiceNo).length;
         const pending = total - converted;
         const rate = total > 0 ? ((converted / total) * 100).toFixed(1) : 0;
         const quoteValue = partnerLeads.reduce((sum, l) => sum + (parseFloat(l.quotationAmount) || 0), 0);
         const bizValue = partnerLeads
-            .filter(l => l.stage === 'converted' || l.leadStatus === 'Converted' || l.invoiceNumber || l.invoiceNo)
+            .filter(l => l.stage === 'converted' || l.leadStatus === 'Converted' || !!l.invoiceNumber || !!l.invoiceNo)
             .reduce((sum, l) => sum + (parseFloat(l.invoiceAmount) || 0), 0);
 
-        return {
+        partnerRows.push({
             id: p.id,
             shopName: p.shop_name,
             posId: p.referral_code || p.id?.slice(0, 8),
@@ -1853,88 +1941,127 @@ function LeadsTab({ leads, posPartners, onRefresh, headers, formatDate, onSelect
             conversionRate: rate,
             totalQuotationValue: quoteValue,
             convertedBusinessValue: bizValue,
-        };
+            isHq: false,
+        });
     });
+
+    // Also include any active partner from leads not yet processed
+    activePartnersList.forEach(ap => {
+        if (!processedShops.has(ap.shopName.toLowerCase())) {
+            const partnerLeads = leads.filter(l => {
+                if (isLeadAdmin(l)) return false;
+                const lShop = (l.partnerShopName || l.posName || '').toLowerCase();
+                return lShop === ap.shopName.toLowerCase();
+            });
+            const total = partnerLeads.length;
+            const converted = partnerLeads.filter(l => l.stage === 'converted' || l.leadStatus === 'Converted' || !!l.invoiceNumber || !!l.invoiceNo).length;
+            const pending = total - converted;
+            const rate = total > 0 ? ((converted / total) * 100).toFixed(1) : 0;
+            const quoteValue = partnerLeads.reduce((sum, l) => sum + (parseFloat(l.quotationAmount) || 0), 0);
+            const bizValue = partnerLeads
+                .filter(l => l.stage === 'converted' || l.leadStatus === 'Converted' || !!l.invoiceNumber || !!l.invoiceNo)
+                .reduce((sum, l) => sum + (parseFloat(l.invoiceAmount) || 0), 0);
+
+            partnerRows.push({
+                id: ap.partnerId || ap.shopName,
+                shopName: ap.shopName,
+                posId: ap.posId || 'POS',
+                ownerName: ap.ownerName || 'POS Partner',
+                totalLeads: total,
+                pendingLeads: pending,
+                convertedLeads: converted,
+                conversionRate: rate,
+                totalQuotationValue: quoteValue,
+                convertedBusinessValue: bizValue,
+                isHq: false,
+            });
+        }
+    });
+
+    // Sort partners: active ones with totalLeads > 0 first
+    partnerRows.sort((a, b) => b.totalLeads - a.totalLeads);
+
+    const posWisePerformance = [hqPerformanceRow, ...partnerRows];
 
     return (
         <div className="space-y-5">
             {/* 1. Global Lead Statistics Overview */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Total Leads</p>
-                    <p className="text-xl font-bold font-display text-navy mt-1">{totalLeadsCount}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">Across all POS users</p>
+                <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm">
+                    <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Total Leads</p>
+                    <p className="text-2xl font-bold font-display text-gray-900 mt-1">{totalLeadsCount}</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">{posPartnerLeadsCount} POS • {adminLeadsCount} Admin Direct</p>
                 </div>
-                <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-                    <p className="text-[11px] font-semibold text-blue-500 uppercase tracking-wider">Pending Leads</p>
-                    <p className="text-xl font-bold font-display text-blue-600 mt-1">{pendingLeadsCount}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">Awaiting conversion</p>
+                <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm">
+                    <p className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">Pending Leads</p>
+                    <p className="text-2xl font-bold font-display text-blue-600 mt-1">{pendingLeadsCount}</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">Awaiting conversion</p>
                 </div>
-                <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-                    <p className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider">Converted Leads</p>
-                    <p className="text-xl font-bold font-display text-emerald-600 mt-1">{convertedLeadsCount}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">Invoiced by admin</p>
+                <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm">
+                    <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Converted Leads</p>
+                    <p className="text-2xl font-bold font-display text-emerald-700 mt-1">{convertedLeadsCount}</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">Invoiced by admin</p>
                 </div>
-                <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-                    <p className="text-[11px] font-semibold text-amber-500 uppercase tracking-wider">Conversion %</p>
-                    <p className="text-xl font-bold font-display text-amber-600 mt-1">{conversionPercentage}%</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">(Converted / Total) × 100</p>
+                <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm">
+                    <p className="text-[11px] font-bold text-amber-600 uppercase tracking-wider">Conversion %</p>
+                    <p className="text-2xl font-bold font-display text-amber-600 mt-1">{conversionPercentage}%</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">(Converted / Total) × 100</p>
                 </div>
-                <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-                    <p className="text-[11px] font-semibold text-purple-500 uppercase tracking-wider">Quotation Value</p>
-                    <p className="text-base font-bold font-display text-purple-700 mt-1 truncate">
+                <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm">
+                    <p className="text-[11px] font-bold text-purple-700 uppercase tracking-wider">Quotation Value</p>
+                    <p className="text-lg font-bold font-display text-purple-700 mt-1 truncate">
                         ₹ {Number(totalQuotationValue || 0).toLocaleString('en-IN')}
                     </p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">Total quotes generated</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">Total quotes generated</p>
                 </div>
-                <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-                    <p className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wider">Converted Value</p>
-                    <p className="text-base font-bold font-display text-emerald-700 mt-1 truncate">
+                <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-sm">
+                    <p className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">Converted Value</p>
+                    <p className="text-lg font-bold font-display text-emerald-800 mt-1 truncate">
                         ₹ {Number(convertedBusinessValue || 0).toLocaleString('en-IN')}
                     </p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">Invoiced business volume</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">Invoiced business volume</p>
                 </div>
             </div>
 
             {/* 2. Sub-views Navigation */}
-            <div className="bg-white rounded-xl border border-gray-100 p-2 shadow-sm flex items-center justify-between gap-2 flex-wrap">
+            <div className="bg-white rounded-xl border border-gray-200/80 p-2 shadow-sm flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-1.5 flex-wrap">
                     <button
                         onClick={() => { setViewMode('all'); setStatusFilter('all'); }}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                             viewMode === 'all' && statusFilter === 'all'
                                 ? 'bg-navy text-white shadow-sm'
-                                : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                         }`}
                     >
                         📋 All Leads & Quotations ({leads.length})
                     </button>
                     <button
                         onClick={() => { setViewMode('all'); setStatusFilter('pending'); }}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                             viewMode === 'all' && statusFilter === 'pending'
                                 ? 'bg-blue-600 text-white shadow-sm'
-                                : 'bg-gray-50 text-blue-700 hover:bg-blue-50'
+                                : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
                         }`}
                     >
                         ⏳ Awaiting Conversion ({pendingLeadsCount})
                     </button>
                     <button
                         onClick={() => { setViewMode('all'); setStatusFilter('converted'); }}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                             viewMode === 'all' && statusFilter === 'converted'
                                 ? 'bg-emerald-600 text-white shadow-sm'
-                                : 'bg-gray-50 text-emerald-700 hover:bg-emerald-50'
+                                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
                         }`}
                     >
                         ✅ Converted ({convertedLeadsCount})
                     </button>
                     <button
                         onClick={() => setViewMode('pos_wise')}
-                        className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                             viewMode === 'pos_wise'
                                 ? 'bg-navy text-white shadow-sm'
-                                : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                         }`}
                     >
                         🏬 POS-Wise Performance
@@ -1942,7 +2069,7 @@ function LeadsTab({ leads, posPartners, onRefresh, headers, formatDate, onSelect
                 </div>
                 <button
                     onClick={onRefresh}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold bg-emerald-50 text-emerald-600 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors border border-emerald-200 cursor-pointer"
                 >
                     <RefreshCw className="w-3.5 h-3.5" />
                     Refresh Data
@@ -1950,94 +2077,125 @@ function LeadsTab({ leads, posPartners, onRefresh, headers, formatDate, onSelect
             </div>
 
             {/* 3. Centralized Lead Table Container */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-2xl border border-gray-200/80 shadow-sm overflow-hidden">
                 {/* Filters Bar */}
-                <div className="p-4 border-b border-gray-100 space-y-3 bg-gray-50/40">
+                <div className="p-4 border-b border-gray-200/80 space-y-3 bg-gray-50/50">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
-                        <div className="flex items-center gap-2 flex-wrap flex-1">
+                        <div className="flex items-center gap-2.5 flex-wrap flex-1">
                             {/* Customer Search */}
-                            <div className="relative min-w-[200px] flex-1 sm:flex-initial">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                            <div className="relative min-w-[210px] flex-1 sm:flex-initial">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
                                 <input
                                     type="text"
-                                    placeholder="Search customer, phone..."
+                                    placeholder="Search customer, phone, location..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     onBlur={() => addToHistory(searchTerm)}
-                                    className="w-full pl-9 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 bg-white"
+                                    className="w-full pl-9 pr-3 py-2 text-xs font-medium text-gray-900 placeholder:text-gray-400 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white shadow-sm"
                                 />
                             </div>
 
                             {/* Quotation Number Search */}
-                            <div className="relative min-w-[150px]">
+                            <div className="relative min-w-[170px]">
                                 <input
                                     type="text"
-                                    placeholder="Quote # (e.g. REPL/26-27/...)"
+                                    placeholder="Quote # (e.g. REPL/...)"
                                     value={quotationSearch}
                                     onChange={(e) => setQuotationSearch(e.target.value)}
-                                    className="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-500 bg-white"
+                                    className="w-full px-3 py-2 text-xs font-medium text-gray-900 placeholder:text-gray-400 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white shadow-sm"
                                 />
                             </div>
 
-                            {/* POS Partner Filter */}
-                            <select
-                                value={selectedPartnerId}
-                                onChange={(e) => setSelectedPartnerId(e.target.value)}
-                                className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-emerald-500 bg-white"
-                            >
-                                <option value="all">All POS Partners</option>
-                                {(posPartners || []).map(p => (
-                                    <option key={p.id} value={p.shop_name}>
-                                        {p.shop_name} ({p.referral_code || p.id?.slice(0, 6)})
+                            {/* POS Partner / Source Filter */}
+                            <div className="relative">
+                                <select
+                                    value={selectedPartnerId}
+                                    onChange={(e) => setSelectedPartnerId(e.target.value)}
+                                    className="appearance-none pl-3 pr-8 py-2 text-xs font-semibold text-gray-900 bg-white border border-gray-300 rounded-xl hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-sm cursor-pointer min-w-[180px]"
+                                >
+                                    <option value="all" className="text-gray-900 bg-white font-semibold py-1">
+                                        All Sources ({leads.length} Leads)
                                     </option>
-                                ))}
-                            </select>
+                                    <option value="admin" className="text-gray-900 bg-white font-medium py-1">
+                                        🏢 REON Head Office (Admin Direct) ({adminLeadsCount})
+                                    </option>
+                                    <option value="all_pos" className="text-gray-900 bg-white font-medium py-1">
+                                        🏬 All POS Partners Combined ({posPartnerLeadsCount})
+                                    </option>
+                                    {activePartnersList.length > 0 && (
+                                        <optgroup label="Active POS Partners (With Quotes)" className="font-bold text-gray-800 bg-gray-100">
+                                            {activePartnersList.map(p => (
+                                                <option key={p.shopName} value={p.shopName} className="text-gray-900 bg-white font-normal py-1">
+                                                    {p.shopName} ({p.posId || 'POS'}) • {p.quoteCount} quote{p.quoteCount > 1 ? 's' : ''}
+                                                </option>
+                                            ))}
+                                        </optgroup>
+                                    )}
+                                    {otherPartnersList.length > 0 && (
+                                        <optgroup label="Other Registered Partners" className="font-bold text-gray-600 bg-gray-50">
+                                            {otherPartnersList.map(p => (
+                                                <option key={p.id} value={p.shop_name} className="text-gray-900 bg-white font-normal py-1">
+                                                    {p.shop_name} ({p.referral_code || p.id?.slice(0, 8)})
+                                                </option>
+                                            ))}
+                                        </optgroup>
+                                    )}
+                                </select>
+                                <ChevronDown className="w-3.5 h-3.5 text-gray-500 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+                            </div>
 
                             {/* Lead Status Filter */}
-                            <select
-                                value={statusFilter}
-                                onChange={(e) => setStatusFilter(e.target.value)}
-                                className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-emerald-500 bg-white"
-                            >
-                                <option value="all">All Conversion Status</option>
-                                <option value="pending">Pending Invoices</option>
-                                <option value="converted">Converted Invoices</option>
-                            </select>
+                            <div className="relative">
+                                <select
+                                    value={statusFilter}
+                                    onChange={(e) => setStatusFilter(e.target.value)}
+                                    className="appearance-none pl-3 pr-8 py-2 text-xs font-semibold text-gray-900 bg-white border border-gray-300 rounded-xl hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-sm cursor-pointer"
+                                >
+                                    <option value="all" className="text-gray-900 bg-white font-semibold py-1">All Conversion Status</option>
+                                    <option value="pending" className="text-gray-900 bg-white font-medium py-1">⏳ Pending Invoices ({pendingLeadsCount})</option>
+                                    <option value="converted" className="text-gray-900 bg-white font-medium py-1">✅ Converted Invoices ({convertedLeadsCount})</option>
+                                </select>
+                                <ChevronDown className="w-3.5 h-3.5 text-gray-500 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+                            </div>
 
                             {/* Stage Filter */}
-                            <select
-                                value={stageFilter}
-                                onChange={(e) => setStageFilter(e.target.value)}
-                                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-emerald-500 bg-white"
-                            >
-                                <option value="all">All Stages</option>
-                                {Object.entries(STAGE_CONFIG).map(([key, val]) => (
-                                    <option key={key} value={key}>{val.label}</option>
-                                ))}
-                            </select>
+                            <div className="relative">
+                                <select
+                                    value={stageFilter}
+                                    onChange={(e) => setStageFilter(e.target.value)}
+                                    className="appearance-none pl-3 pr-8 py-2 text-xs font-semibold text-gray-900 bg-white border border-gray-300 rounded-xl hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-sm cursor-pointer"
+                                >
+                                    <option value="all" className="text-gray-900 bg-white font-semibold py-1">All Pipeline Stages</option>
+                                    {Object.entries(STAGE_CONFIG).map(([key, val]) => (
+                                        <option key={key} value={key} className="text-gray-900 bg-white font-normal py-1">{val.label}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown className="w-3.5 h-3.5 text-gray-500 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+                            </div>
                         </div>
 
                         {/* Date Range Filter */}
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-medium text-gray-600">Date:</span>
                             <input
                                 type="date"
                                 value={fromDate}
                                 onChange={(e) => setFromDate(e.target.value)}
-                                className="border border-gray-200 rounded-lg p-1.5 text-xs text-gray-700 bg-white focus:outline-none focus:border-emerald-500"
+                                className="border border-gray-300 rounded-xl px-2.5 py-1.5 text-xs font-medium text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-sm"
                             />
-                            <span className="text-gray-400 text-xs">to</span>
+                            <span className="text-gray-400 text-xs font-medium">to</span>
                             <input
                                 type="date"
                                 value={toDate}
                                 onChange={(e) => setToDate(e.target.value)}
-                                className="border border-gray-200 rounded-lg p-1.5 text-xs text-gray-700 bg-white focus:outline-none focus:border-emerald-500"
+                                className="border border-gray-300 rounded-xl px-2.5 py-1.5 text-xs font-medium text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-sm"
                             />
-                            {(fromDate || toDate || selectedPartnerId !== 'all' || quotationSearch) && (
+                            {(fromDate || toDate || selectedPartnerId !== 'all' || quotationSearch || searchTerm || stageFilter !== 'all' || statusFilter !== 'all') && (
                                 <button
                                     onClick={() => { setFromDate(''); setToDate(''); setSelectedPartnerId('all'); setQuotationSearch(''); setSearchTerm(''); setStageFilter('all'); setStatusFilter('all'); }}
-                                    className="text-xs text-red-500 hover:underline font-medium"
+                                    className="text-xs text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 font-semibold px-2.5 py-1.5 rounded-xl border border-red-200 transition-colors cursor-pointer"
                                 >
-                                    Reset
+                                    Reset Filters
                                 </button>
                             )}
                         </div>
@@ -2048,49 +2206,58 @@ function LeadsTab({ leads, posPartners, onRefresh, headers, formatDate, onSelect
                 {viewMode === 'pos_wise' ? (
                     /* POS-Wise Performance Table */
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
+                        <table className="w-full text-sm border-collapse">
                             <thead>
-                                <tr className="border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400 font-semibold bg-gray-50/50">
-                                    <th className="text-left py-3.5 px-5">POS Partner & Shop</th>
-                                    <th className="text-left py-3.5 px-3">POS ID</th>
-                                    <th className="text-center py-3.5 px-3">Total Leads</th>
-                                    <th className="text-center py-3.5 px-3">Pending</th>
-                                    <th className="text-center py-3.5 px-3">Converted</th>
-                                    <th className="text-center py-3.5 px-3">Conversion Rate</th>
-                                    <th className="text-right py-3.5 px-4">Quotation Value</th>
-                                    <th className="text-right py-3.5 px-5">Converted Value</th>
+                                <tr className="border-b border-gray-200 text-[11px] uppercase tracking-wider text-gray-500 font-bold bg-gray-50/90 select-none">
+                                    <th className="text-left py-3.5 px-4 min-w-[210px]">POS Partner / Source</th>
+                                    <th className="text-left py-3.5 px-3 min-w-[130px]">POS ID / Code</th>
+                                    <th className="text-center py-3.5 px-3 min-w-[90px]">Total Leads</th>
+                                    <th className="text-center py-3.5 px-3 min-w-[90px]">Pending</th>
+                                    <th className="text-center py-3.5 px-3 min-w-[90px]">Converted</th>
+                                    <th className="text-center py-3.5 px-3 min-w-[110px]">Conversion Rate</th>
+                                    <th className="text-right py-3.5 px-4 min-w-[130px]">Quotation Value</th>
+                                    <th className="text-right py-3.5 px-4 min-w-[140px]">Converted Value</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {posWisePerformance.length === 0 ? (
                                     <tr><td colSpan="8" className="text-center py-12 text-gray-400">No POS Partners found</td></tr>
                                 ) : posWisePerformance.map((p) => (
-                                    <tr key={p.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
-                                        <td className="py-3.5 px-5">
-                                            <p className="font-semibold text-navy">{p.shopName}</p>
-                                            <p className="text-xs text-gray-400">{p.ownerName}</p>
+                                    <tr key={p.id} className={`border-b border-gray-100 transition-colors ${p.isHq ? 'bg-slate-50/70 hover:bg-slate-100/70 font-medium' : 'hover:bg-gray-50/70'}`}>
+                                        <td className="py-3.5 px-4 align-middle">
+                                            <div className="flex items-center gap-2.5">
+                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs flex-shrink-0 ${
+                                                    p.isHq ? 'bg-slate-200 text-slate-800 border border-slate-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                                }`}>
+                                                    {p.isHq ? 'HQ' : 'POS'}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="font-semibold text-gray-900 text-xs truncate">{p.shopName}</p>
+                                                    <p className="text-[11px] text-gray-500 truncate">{p.ownerName}</p>
+                                                </div>
+                                            </div>
                                         </td>
-                                        <td className="py-3.5 px-3 font-mono text-xs font-semibold text-gray-600">
+                                        <td className="py-3.5 px-3 align-middle font-mono text-xs font-semibold text-gray-700">
                                             {p.posId}
                                         </td>
-                                        <td className="py-3.5 px-3 text-center font-bold text-navy">
+                                        <td className="py-3.5 px-3 align-middle text-center font-bold text-gray-900">
                                             {p.totalLeads}
                                         </td>
-                                        <td className="py-3.5 px-3 text-center text-blue-600 font-semibold">
+                                        <td className="py-3.5 px-3 align-middle text-center text-blue-600 font-semibold">
                                             {p.pendingLeads}
                                         </td>
-                                        <td className="py-3.5 px-3 text-center text-emerald-600 font-semibold">
+                                        <td className="py-3.5 px-3 align-middle text-center text-emerald-700 font-semibold">
                                             {p.convertedLeads}
                                         </td>
-                                        <td className="py-3.5 px-3 text-center">
-                                            <span className="font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full text-xs">
+                                        <td className="py-3.5 px-3 align-middle text-center">
+                                            <span className="font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full text-xs border border-amber-200">
                                                 {p.conversionRate}%
                                             </span>
                                         </td>
-                                        <td className="py-3.5 px-4 text-right font-mono font-medium text-purple-700">
+                                        <td className="py-3.5 px-4 align-middle text-right font-mono font-medium text-purple-700">
                                             ₹ {Number(p.totalQuotationValue || 0).toLocaleString('en-IN')}
                                         </td>
-                                        <td className="py-3.5 px-5 text-right font-mono font-bold text-emerald-700">
+                                        <td className="py-3.5 px-4 align-middle text-right font-mono font-bold text-emerald-700">
                                             ₹ {Number(p.convertedBusinessValue || 0).toLocaleString('en-IN')}
                                         </td>
                                     </tr>
@@ -2101,17 +2268,17 @@ function LeadsTab({ leads, posPartners, onRefresh, headers, formatDate, onSelect
                 ) : (
                     /* All Leads & Quotations Table */
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
+                        <table className="w-full text-sm border-collapse">
                             <thead>
-                                <tr className="border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400 font-semibold bg-gray-50/50">
-                                    <th className="text-left py-3.5 px-5">Customer</th>
-                                    <th className="text-left py-3.5 px-3">Contact</th>
-                                    <th className="text-left py-3.5 px-3">POS Partner</th>
-                                    <th className="text-left py-3.5 px-3">Quotation No</th>
-                                    <th className="text-right py-3.5 px-3">Quote Amount</th>
-                                    <th className="text-center py-3.5 px-3">Lead Status</th>
-                                    <th className="text-left py-3.5 px-3">Linked Invoice</th>
-                                    <th className="text-right py-3.5 px-5">Actions</th>
+                                <tr className="border-b border-gray-200 text-[11px] uppercase tracking-wider text-gray-500 font-bold bg-gray-50/90 select-none">
+                                    <th className="text-left py-3.5 px-4 min-w-[200px]">Customer</th>
+                                    <th className="text-left py-3.5 px-3 min-w-[150px]">Contact</th>
+                                    <th className="text-left py-3.5 px-3 min-w-[210px]">POS Partner / Source</th>
+                                    <th className="text-left py-3.5 px-3 min-w-[160px]">Quotation No & Date</th>
+                                    <th className="text-right py-3.5 px-3 min-w-[120px]">Quote Amount</th>
+                                    <th className="text-center py-3.5 px-3 min-w-[110px]">Lead Status</th>
+                                    <th className="text-left py-3.5 px-3 min-w-[150px]">Linked Invoice</th>
+                                    <th className="text-right py-3.5 px-4 min-w-[200px]">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -2122,61 +2289,127 @@ function LeadsTab({ leads, posPartners, onRefresh, headers, formatDate, onSelect
                                     const quoteNo = lead.quotationNumber || lead.quotationNo;
                                     const invoiceNo = lead.invoiceNumber || lead.invoiceNo;
                                     const quoteAmt = parseFloat(lead.quotationAmount) || 0;
+                                    const isAdminLead = isLeadAdmin(lead);
+                                    const shopName = getLeadShopName(lead);
+                                    const posId = getLeadPosId(lead);
+                                    const ownerName = getLeadOwner(lead);
 
                                     return (
-                                        <tr key={lead.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                                            <td className="py-3.5 px-5">
-                                                <p className="font-semibold text-navy">{lead.customerName}</p>
-                                                <p className="text-xs text-gray-400">{lead.address || lead.district || '—'}</p>
+                                        <tr key={lead.id} className="border-b border-gray-100 hover:bg-gray-50/70 transition-colors">
+                                            {/* 1. Customer */}
+                                            <td className="py-3.5 px-4 align-middle">
+                                                <p className="font-semibold text-gray-900 text-sm leading-snug">{lead.customerName}</p>
+                                                <p className="text-xs text-gray-500 truncate max-w-[220px] mt-0.5" title={lead.address || lead.district || ''}>
+                                                    {lead.address || lead.district || '—'}
+                                                </p>
                                             </td>
-                                            <td className="py-3.5 px-3">
-                                                <p className="text-gray-700 font-mono text-xs">{lead.mobile}</p>
-                                                <p className="text-xs text-gray-400">{lead.email || '—'}</p>
+
+                                            {/* 2. Contact */}
+                                            <td className="py-3.5 px-3 align-middle">
+                                                <p className="text-gray-900 font-mono text-xs font-semibold">{lead.mobile || '—'}</p>
+                                                <p className="text-[11px] text-gray-500 truncate max-w-[160px] mt-0.5" title={lead.email || ''}>
+                                                    {lead.email || '—'}
+                                                </p>
                                             </td>
-                                            <td className="py-3.5 px-3">
-                                                <p className="text-gray-800 font-medium">{lead.partnerShopName || lead.posName || '—'}</p>
-                                                <p className="text-[11px] text-gray-400">{lead.posId || lead.source || 'pos_partner'}</p>
+
+                                            {/* 3. POS Partner / Source */}
+                                            <td className="py-3.5 px-3 align-middle">
+                                                {isAdminLead ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700 font-bold text-xs flex-shrink-0">
+                                                            HQ
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <p className="font-semibold text-gray-900 text-xs truncate">REON Head Office</p>
+                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200 mt-0.5">
+                                                                Admin Direct
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700 font-bold text-xs flex-shrink-0">
+                                                            POS
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <p className="font-semibold text-gray-900 text-xs truncate" title={shopName}>
+                                                                {shopName}
+                                                            </p>
+                                                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                                                {posId && (
+                                                                    <span className="font-mono text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                                                        {posId}
+                                                                    </span>
+                                                                )}
+                                                                {ownerName && (
+                                                                    <span className="text-[10px] text-gray-500 truncate max-w-[120px]" title={ownerName}>
+                                                                        {ownerName}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </td>
-                                            <td className="py-3.5 px-3">
+
+                                            {/* 4. Quotation No & Date */}
+                                            <td className="py-3.5 px-3 align-middle">
                                                 {quoteNo ? (
-                                                    <span className="font-mono text-xs font-semibold bg-gray-100 text-gray-800 px-2 py-0.5 rounded border border-gray-200">
+                                                    <span className="font-mono text-xs font-bold bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200 inline-block">
                                                         {quoteNo}
                                                     </span>
                                                 ) : (
                                                     <span className="text-gray-400 text-xs">—</span>
                                                 )}
-                                                <p className="text-[10px] text-gray-400 mt-0.5">{formatDate(lead.quotationDate || lead.createdAt)}</p>
+                                                <p className="text-[11px] text-gray-500 mt-1 font-medium">{formatDate(lead.quotationDate || lead.createdAt)}</p>
                                             </td>
-                                            <td className="py-3.5 px-3 text-right font-mono font-semibold text-gray-800">
-                                                {quoteAmt > 0 ? `₹ ${quoteAmt.toLocaleString('en-IN')}` : '—'}
+
+                                            {/* 5. Quote Amount */}
+                                            <td className="py-3.5 px-3 align-middle text-right">
+                                                <p className="font-mono text-xs font-bold text-gray-900 whitespace-nowrap">
+                                                    {quoteAmt > 0 ? `₹ ${quoteAmt.toLocaleString('en-IN')}` : '—'}
+                                                </p>
+                                                {lead.estimatedKw > 0 && (
+                                                    <p className="text-[10px] text-gray-500 font-medium mt-0.5">
+                                                        {lead.estimatedKw} kW
+                                                    </p>
+                                                )}
                                             </td>
-                                            <td className="py-3.5 px-3 text-center">
+
+                                            {/* 6. Lead Status */}
+                                            <td className="py-3.5 px-3 align-middle text-center">
                                                 {isConverted ? (
-                                                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700">
+                                                    <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
                                                         Converted
                                                     </span>
                                                 ) : (
-                                                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">
+                                                    <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
                                                         Pending
                                                     </span>
                                                 )}
                                             </td>
-                                            <td className="py-3.5 px-3">
+
+                                            {/* 7. Linked Invoice */}
+                                            <td className="py-3.5 px-3 align-middle">
                                                 {invoiceNo ? (
                                                     <div>
-                                                        <span className="font-mono text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                                        <span className="font-mono text-xs font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 inline-block">
                                                             {invoiceNo}
                                                         </span>
                                                         {lead.convertedAt && (
-                                                            <p className="text-[10px] text-gray-400 mt-0.5">{formatDate(lead.convertedAt)}</p>
+                                                            <p className="text-[10px] text-gray-500 mt-0.5 font-medium">{formatDate(lead.convertedAt)}</p>
                                                         )}
                                                     </div>
                                                 ) : (
                                                     <span className="text-xs text-gray-400 italic">Not converted</span>
                                                 )}
                                             </td>
-                                            <td className="py-3.5 px-5 text-right">
-                                                <div className="flex items-center justify-end gap-1.5">
+
+                                            {/* 8. Actions */}
+                                            <td className="py-3.5 px-4 align-middle text-right">
+                                                <div className="inline-flex items-center justify-end gap-2">
                                                     {!isConverted && quoteNo && onSelectQuotationForInvoice && (
                                                         <button
                                                             onClick={() => onSelectQuotationForInvoice({
@@ -2184,7 +2417,7 @@ function LeadsTab({ leads, posPartners, onRefresh, headers, formatDate, onSelect
                                                                 offer_no: quoteNo,
                                                                 customer_name: lead.customerName,
                                                                 total_price: quoteAmt,
-                                                                pos_name: lead.partnerShopName || lead.posName,
+                                                                pos_name: shopName,
                                                                 raw_data: {
                                                                     address: lead.address,
                                                                     mobile: lead.mobile,
@@ -2192,21 +2425,26 @@ function LeadsTab({ leads, posPartners, onRefresh, headers, formatDate, onSelect
                                                                     system_capacity_kw: lead.estimatedKw,
                                                                 }
                                                             })}
-                                                            className="text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-md shadow-sm transition-colors whitespace-nowrap"
+                                                            className="text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-lg shadow-sm transition-colors whitespace-nowrap cursor-pointer"
                                                             title="Generate invoice to convert this quotation"
                                                         >
                                                             Create Invoice
                                                         </button>
                                                     )}
-                                                    <select
-                                                        value={lead.stage}
-                                                        onChange={(e) => handleStageUpdate(lead.id, e.target.value)}
-                                                        className="text-[11px] border border-gray-200 rounded-md px-1.5 py-1 focus:outline-none focus:border-emerald-500 bg-white"
-                                                    >
-                                                        {Object.entries(STAGE_CONFIG).map(([key, val]) => (
-                                                            <option key={key} value={key}>{val.label}</option>
-                                                        ))}
-                                                    </select>
+                                                    <div className="relative">
+                                                        <select
+                                                            value={lead.stage}
+                                                            onChange={(e) => handleStageUpdate(lead.id, e.target.value)}
+                                                            className="appearance-none pl-2 pr-6 py-1 text-[11px] font-semibold text-gray-900 bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-sm cursor-pointer"
+                                                        >
+                                                            {Object.entries(STAGE_CONFIG).map(([key, val]) => (
+                                                                <option key={key} value={key} className="text-gray-900 bg-white font-normal py-0.5">
+                                                                    {val.label}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                        <ChevronDown className="w-3 h-3 text-gray-500 pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2" />
+                                                    </div>
                                                 </div>
                                             </td>
                                         </tr>

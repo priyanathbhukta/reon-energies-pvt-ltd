@@ -11,6 +11,16 @@
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
+
+  /* Form control defaults to prevent dark theme white text inheritance on light elements */
+  select, input, textarea {
+    color: #0f172a;
+  }
+
+  option, optgroup {
+    color: #0f172a;
+    background-color: #ffffff;
+  }
 }
 
 @layer utilities {

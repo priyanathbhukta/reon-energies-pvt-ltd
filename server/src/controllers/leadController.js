@@ -8,15 +8,25 @@ const router = Router();
 // List leads — POS partners see their own, admins see all
 router.get('/', authenticate, async (req, res) => {
   try {
-    const { stage, priority, source, search, page = 1, limit = 20, sort = 'created_at', order = 'desc' } = req.query;
+    const { stage, priority, source, search, partner_id, page = 1, limit = 50, sort = 'created_at', order = 'desc' } = req.query;
     const offset = (page - 1) * limit;
     const isAdmin = req.user.roles.includes('super_admin') || req.user.roles.includes('sales_manager');
 
     let query = `
-      SELECT l.*, pp.shop_name as partner_shop_name, u.full_name as assigned_name,
+      SELECT l.*,
+             pp.id as pp_id,
+             pp.shop_name as partner_shop_name,
+             pp.referral_code as partner_referral_code,
+             u_owner.full_name as partner_owner_name,
+             u.full_name as assigned_name,
              COUNT(*) OVER() as total_count
       FROM leads l
-      LEFT JOIN pos_partners pp ON l.partner_id = pp.id
+      LEFT JOIN pos_partners pp ON (
+        (l.partner_id IS NOT NULL AND l.partner_id = pp.id)
+        OR (l.pos_id IS NOT NULL AND pp.referral_code = l.pos_id)
+        OR (l.pos_name IS NOT NULL AND pp.shop_name = l.pos_name)
+      )
+      LEFT JOIN users u_owner ON pp.user_id = u_owner.id
       LEFT JOIN users u ON l.assigned_to = u.id
       WHERE l.deleted_at IS NULL
     `;
@@ -42,6 +52,14 @@ router.get('/', authenticate, async (req, res) => {
       query += ` AND (l.partner_id = $${paramIdx} OR l.pos_name = $${paramIdx + 1} OR l.pos_id = $${paramIdx + 2})`;
       params.push(partner.id, partner.shop_name, partner.referral_code);
       paramIdx += 3;
+    } else if (partner_id) {
+      if (partner_id === 'admin') {
+        query += ` AND (l.pos_name = 'admin' OR (l.partner_id IS NULL AND l.pos_id IS NULL AND (l.pos_name IS NULL OR l.pos_name = 'admin')))`;
+      } else {
+        query += ` AND (l.partner_id = $${paramIdx} OR pp.id = $${paramIdx} OR l.pos_id = $${paramIdx} OR l.pos_name = $${paramIdx})`;
+        params.push(partner_id);
+        paramIdx++;
+      }
     }
 
     if (stage) {
@@ -57,7 +75,15 @@ router.get('/', authenticate, async (req, res) => {
       params.push(source);
     }
     if (search) {
-      query += ` AND (l.customer_name ILIKE $${paramIdx} OR l.mobile ILIKE $${paramIdx} OR l.address ILIKE $${paramIdx})`;
+      query += ` AND (
+        l.customer_name ILIKE $${paramIdx} 
+        OR l.mobile ILIKE $${paramIdx} 
+        OR l.address ILIKE $${paramIdx}
+        OR l.quotation_no ILIKE $${paramIdx}
+        OR l.pos_name ILIKE $${paramIdx}
+        OR pp.shop_name ILIKE $${paramIdx}
+        OR pp.referral_code ILIKE $${paramIdx}
+      )`;
       params.push(`%${search}%`);
       paramIdx++;
     }
@@ -88,9 +114,11 @@ router.get('/', authenticate, async (req, res) => {
         source: r.source,
         stage: r.stage,
         priority: r.priority,
-        partnerShopName: r.partner_shop_name || r.pos_name,
-        posName: r.pos_name || r.partner_shop_name,
-        posId: r.pos_id,
+        partnerId: r.partner_id || r.pp_id || null,
+        partnerShopName: r.partner_shop_name || (r.pos_name !== 'admin' ? r.pos_name : null),
+        partnerOwnerName: r.partner_owner_name || null,
+        posName: r.pos_name,
+        posId: r.pos_id || r.partner_referral_code || null,
         quotationId: r.quotation_id,
         quotationNumber: r.quotation_no,
         quotationNo: r.quotation_no,
