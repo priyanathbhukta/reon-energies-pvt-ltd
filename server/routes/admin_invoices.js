@@ -163,16 +163,25 @@ router.post('/', async (req, res) => {
     }
 
     const grandTotal = parseFloat(data.grandTotal || 0);
+    const sourceProformaInvoiceId = data.source_proforma_invoice_id || data.sourceProformaInvoiceId || null;
+    const proformaInvoiceNo = data.proforma_invoice_no || data.proformaInvoiceNo || null;
+    const shipToDetails = data.shipToDetails || {};
+    const sameAsBillTo = data.sameAsBillTo !== false;
+    const signatureUrl = data.authorizedSignatureUrl || null;
 
     const invoiceQuery = `
       INSERT INTO invoices (
-        invoice_no, company_details, customer_details, invoice_details, items,
-        subtotal, cgst_total, sgst_total, grand_total, pdf_url,
-        quotation_id, quotation_no, lead_id, partner_id, pos_name, pos_id, user_id
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+        invoice_no, company_details, customer_details, ship_to_details, same_as_bill_to,
+        invoice_details, items, subtotal, cgst_total, sgst_total, grand_total, pdf_url,
+        quotation_id, quotation_no, lead_id, partner_id, pos_name, pos_id, user_id,
+        source_proforma_invoice_id, proforma_invoice_no, payment_status, total_received,
+        outstanding_amount, authorized_signature_url, updated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,'unpaid',0.00,$11,$22,NOW())
       ON CONFLICT (invoice_no) DO UPDATE SET
         company_details = EXCLUDED.company_details,
         customer_details = EXCLUDED.customer_details,
+        ship_to_details = EXCLUDED.ship_to_details,
+        same_as_bill_to = EXCLUDED.same_as_bill_to,
         invoice_details = EXCLUDED.invoice_details,
         items = EXCLUDED.items,
         subtotal = EXCLUDED.subtotal,
@@ -186,13 +195,19 @@ router.post('/', async (req, res) => {
         partner_id = COALESCE(EXCLUDED.partner_id, invoices.partner_id),
         pos_name = COALESCE(EXCLUDED.pos_name, invoices.pos_name),
         pos_id = COALESCE(EXCLUDED.pos_id, invoices.pos_id),
-        user_id = COALESCE(EXCLUDED.user_id, invoices.user_id)
+        user_id = COALESCE(EXCLUDED.user_id, invoices.user_id),
+        source_proforma_invoice_id = COALESCE(EXCLUDED.source_proforma_invoice_id, invoices.source_proforma_invoice_id),
+        proforma_invoice_no = COALESCE(EXCLUDED.proforma_invoice_no, invoices.proforma_invoice_no),
+        authorized_signature_url = COALESCE(EXCLUDED.authorized_signature_url, invoices.authorized_signature_url),
+        updated_at = NOW()
       RETURNING *;
     `;
     const invoiceValues = [
       invoiceNo,
       JSON.stringify(data.companyDetails || {}),
       JSON.stringify(data.customerDetails || {}),
+      JSON.stringify(shipToDetails),
+      sameAsBillTo,
       JSON.stringify(data.invoiceDetails || {}),
       JSON.stringify(data.items || []),
       data.subtotal || 0,
@@ -207,6 +222,9 @@ router.post('/', async (req, res) => {
       posName,
       posId,
       userId,
+      sourceProformaInvoiceId,
+      proformaInvoiceNo,
+      signatureUrl,
     ];
 
     const result = await client.query(invoiceQuery, invoiceValues);
@@ -387,9 +405,151 @@ router.post('/link-quotation', async (req, res) => {
 // GET /api/admin/invoices
 router.get('/', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM invoices ORDER BY created_at DESC');
+    const query = `
+      SELECT inv.*,
+             pi.proforma_invoice_no,
+             q.offer_no as linked_quotation_no,
+             COALESCE(p_agg.total_received, inv.total_received, 0) as total_received,
+             GREATEST(0, inv.grand_total - COALESCE(p_agg.total_received, inv.total_received, 0)) as outstanding_amount,
+             CASE
+               WHEN COALESCE(p_agg.total_received, inv.total_received, 0) <= 0 THEN 'unpaid'
+               WHEN COALESCE(p_agg.total_received, inv.total_received, 0) >= inv.grand_total THEN 'paid'
+               ELSE 'partially_paid'
+             END as payment_status,
+             COALESCE(p_agg.confirmed_count, 0) as payment_count
+      FROM invoices inv
+      LEFT JOIN proforma_invoices pi ON inv.source_proforma_invoice_id = pi.id
+      LEFT JOIN quotations q ON inv.quotation_id = q.id
+      LEFT JOIN (
+        SELECT invoice_id,
+               SUM(amount_received) as total_received,
+               COUNT(*) as confirmed_count
+        FROM invoice_payments
+        WHERE status = 'confirmed'
+        GROUP BY invoice_id
+      ) p_agg ON inv.id = p_agg.invoice_id
+      ORDER BY inv.created_at DESC
+    `;
+    const result = await pool.query(query);
     res.json(result.rows);
   } catch (err) {
+    console.error('Fetch invoices error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/invoices/search
+router.get('/search', async (req, res) => {
+  try {
+    const { quotationNumber, customerName, invoiceNumber } = req.query;
+    let conditions = [];
+    let params = [];
+    let idx = 1;
+
+    if (quotationNumber) {
+      conditions.push(`(inv.quotation_no ILIKE $${idx} OR q.offer_no ILIKE $${idx})`);
+      params.push(`%${quotationNumber.trim()}%`);
+      idx++;
+    }
+
+    if (invoiceNumber) {
+      conditions.push(`inv.invoice_no ILIKE $${idx}`);
+      params.push(`%${invoiceNumber.trim()}%`);
+      idx++;
+    }
+
+    if (customerName) {
+      conditions.push(`(inv.customer_details->>'name' ILIKE $${idx} OR inv.pos_name ILIKE $${idx})`);
+      params.push(`%${customerName.trim()}%`);
+      idx++;
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const query = `
+      SELECT inv.*,
+             pi.proforma_invoice_no,
+             q.offer_no as linked_quotation_no,
+             COALESCE(p_agg.total_received, inv.total_received, 0) as total_received,
+             GREATEST(0, inv.grand_total - COALESCE(p_agg.total_received, inv.total_received, 0)) as outstanding_amount,
+             CASE
+               WHEN COALESCE(p_agg.total_received, inv.total_received, 0) <= 0 THEN 'unpaid'
+               WHEN COALESCE(p_agg.total_received, inv.total_received, 0) >= inv.grand_total THEN 'paid'
+               ELSE 'partially_paid'
+             END as payment_status
+      FROM invoices inv
+      LEFT JOIN proforma_invoices pi ON inv.source_proforma_invoice_id = pi.id
+      LEFT JOIN quotations q ON inv.quotation_id = q.id
+      LEFT JOIN (
+        SELECT invoice_id,
+               SUM(amount_received) as total_received
+        FROM invoice_payments
+        WHERE status = 'confirmed'
+        GROUP BY invoice_id
+      ) p_agg ON inv.id = p_agg.invoice_id
+      ${whereClause}
+      ORDER BY inv.created_at DESC
+    `;
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Search invoices error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/invoices/:id
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const invRes = await pool.query(`
+      SELECT inv.*,
+             pi.proforma_invoice_no,
+             q.offer_no as linked_quotation_no
+      FROM invoices inv
+      LEFT JOIN proforma_invoices pi ON inv.source_proforma_invoice_id = pi.id
+      LEFT JOIN quotations q ON inv.quotation_id = q.id
+      WHERE inv.id = $1
+    `, [id]);
+
+    if (invRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
+
+    const invoice = invRes.rows[0];
+
+    // Fetch payments
+    const paymentsRes = await pool.query(
+      'SELECT * FROM invoice_payments WHERE invoice_id = $1 ORDER BY payment_date DESC, created_at DESC',
+      [id]
+    );
+
+    const payments = paymentsRes.rows;
+    const confirmedTotal = payments
+      .filter(p => p.status === 'confirmed')
+      .reduce((sum, p) => sum + parseFloat(p.amount_received || 0), 0);
+    const grandTotal = parseFloat(invoice.grand_total || 0);
+    const outstanding = Math.max(0, parseFloat((grandTotal - confirmedTotal).toFixed(2)));
+
+    let paymentStatus = 'unpaid';
+    if (confirmedTotal > 0) {
+      if (Math.abs(confirmedTotal - grandTotal) < 0.01) {
+        paymentStatus = 'paid';
+      } else if (confirmedTotal < grandTotal) {
+        paymentStatus = 'partially_paid';
+      } else {
+        paymentStatus = 'overpaid';
+      }
+    }
+
+    invoice.payments = payments;
+    invoice.total_received = confirmedTotal;
+    invoice.outstanding_amount = outstanding;
+    invoice.payment_status = paymentStatus;
+
+    res.json(invoice);
+  } catch (err) {
+    console.error('Get invoice details error:', err);
     res.status(500).json({ error: err.message });
   }
 });

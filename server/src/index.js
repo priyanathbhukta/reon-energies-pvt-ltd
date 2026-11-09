@@ -14,6 +14,9 @@ import dashboardRouter from '../routes/dashboard.js';
 import contentRouter from '../routes/content.js';
 import adminQuotationsRouter from '../routes/admin_quotations.js';
 import adminInvoicesRouter from '../routes/admin_invoices.js';
+import adminProformaInvoicesRouter from '../routes/admin_proforma_invoices.js';
+import adminPaymentsRouter from '../routes/admin_payments.js';
+import adminSignatureRouter from '../routes/admin_signature.js';
 import pdfsRouter from '../routes/pdfs.js';
 import projectsRouter from '../routes/projects.js';
 import legacyAuthMiddleware from '../middleware/auth.js';
@@ -105,8 +108,12 @@ app.use('/api/dashboard', dashboardRouter);
 app.use('/api/content', contentRouter);
 app.use('/api/admin/quotations', legacyAuthMiddleware, adminQuotationsRouter);
 app.use('/api/admin/invoices', legacyAuthMiddleware, adminInvoicesRouter);
+app.use('/api/admin/proforma-invoices', legacyAuthMiddleware, adminProformaInvoicesRouter);
+app.use('/api/admin', legacyAuthMiddleware, adminPaymentsRouter);
+app.use('/api/admin/signature', legacyAuthMiddleware, adminSignatureRouter);
 app.use('/api/projects', legacyAuthMiddleware, projectsRouter);
 app.use('/pdfs', pdfsRouter);
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 // ─── New POS Portal Routes ──────────────────────────────────
 app.use('/api/v2/auth', authController);

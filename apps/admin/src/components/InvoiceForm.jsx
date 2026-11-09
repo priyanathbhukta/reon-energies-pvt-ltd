@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { API } from '@/lib/legacy-api';
 
 /* ── Colour tokens matching the REON brand ──────────────────────────────── */
@@ -32,6 +32,7 @@ const INIT_COMPANY = {
   accountNumber: '0162202100001274',
   ifsc: 'PUNB0016220',
   branch: 'Singur',
+  upiId: '8436649991m@pnb',
 };
 
 const INIT_CUSTOMER = {
@@ -43,6 +44,15 @@ const INIT_CUSTOMER = {
   phone: '',
 };
 
+const INIT_SHIP_TO = {
+  name: '',
+  recipientName: '',
+  address: '',
+  gstin: '',
+  state: 'West Bengal',
+  pinCode: '',
+};
+
 const HSN_DATA = [
   { hsn: '85414011', desc: 'Solar PV Module (Panel)', rate: 5 },
   { hsn: '85044010', desc: 'Solar Inverter (On-grid/Hybrid)', rate: 5 },
@@ -52,7 +62,7 @@ const HSN_DATA = [
   { hsn: '85371000', desc: 'ACDB / DCDB / Junction Box', rate: 18 },
   { hsn: '85446090', desc: 'DC Cable (PV Cable)', rate: 18 },
   { hsn: '854460', desc: 'AC/Earthing Cable', rate: 18 },
-  { hsn: '85369090', desc: 'MC4 Connector / Cable Lug / Terminal', rate: 5 }, // Connector is 5, Lug is 18 (we use 18 as general, but can leave up to user)
+  { hsn: '85369090', desc: 'MC4 Connector / Cable Lug / Terminal', rate: 5 },
   { hsn: '85362000', desc: 'MCB / MCCB', rate: 18 },
   { hsn: '85365090', desc: 'Isolator Switch', rate: 18 },
   { hsn: '85361000', desc: 'Fuse', rate: 18 },
@@ -74,9 +84,19 @@ const HSN_DATA = [
 const INIT_INVOICE_DETAILS = {
   invoiceNo: '',
   invoiceDate: new Date().toISOString().split('T')[0],
-  dueDate: new Date(Date.now() + 15*86400000).toISOString().split('T')[0], // +15 days
+  dueDate: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0], // +15 days
+  validUntil: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0], // +30 days
   ewayBillNumber: '',
 };
+
+/* ── Standard Indian/Financial number formatting: 1,000.00, 100,000.00, 1,000,000.00 ── */
+export const fmt = n => {
+  const val = parseFloat(n);
+  if (isNaN(val) || val === 0) return '0.00';
+  return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+export const fmtRs = n => `₹ ${fmt(n)}`;
 
 /* ── Tiny reusable field component ──────────────────────────────────────── */
 function Field({ label, name, value, onChange, type = 'text', required = false,
@@ -118,7 +138,7 @@ function SectionHead({ title }) {
 }
 
 function RRow({ label, value, bold }) {
-  if (!value) return null;
+  if (!value && value !== 0) return null;
   return (
     <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, fontSize: 12.5, padding: '6px 0' }}>
       <div style={{ width: '42%', color: C.teal, fontWeight: 600 }}>{label}</div>
@@ -127,15 +147,29 @@ function RRow({ label, value, bold }) {
   );
 }
 
-export default function InvoiceForm({ editData, onClearEdit, preselectedQuotation }) {
+export default function InvoiceForm({ editData, onClearEdit, preselectedQuotation, isProforma = false, onGenerated }) {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [successUrl, setSuccessUrl] = useState(null);
+  const [generatedDocNo, setGeneratedDocNo] = useState('');
 
   const [companyDetails, setCompanyDetails] = useState(INIT_COMPANY);
   const [customerDetails, setCustomerDetails] = useState(INIT_CUSTOMER);
-  const [invoiceDetails, setInvoiceDetails] = useState({ ...INIT_INVOICE_DETAILS, invoiceNo: `INV/26-27/001` });
+  
+  // SHIP TO state & Same as Bill To toggle
+  const [sameAsBillTo, setSameAsBillTo] = useState(true);
+  const [shipToDetails, setShipToDetails] = useState(INIT_SHIP_TO);
+
+  // Authorized Signature state
+  const [signatureUrl, setSignatureUrl] = useState(null);
+  const [uploadingSig, setUploadingSig] = useState(false);
+  const sigFileInputRef = useRef(null);
+
+  const [invoiceDetails, setInvoiceDetails] = useState({
+    ...INIT_INVOICE_DETAILS,
+    invoiceNo: isProforma ? 'PI/26-27/001' : 'INV/26-27/001'
+  });
   
   const [items, setItems] = useState([{ id: 1, name: '', description: '', hsn: '', quantity: 1, unit: 'Nos', rate: 0, tax: 18 }]);
   const [charges, setCharges] = useState({ loadingCharges: 0 });
@@ -143,6 +177,70 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
   const [quotations, setQuotations] = useState([]);
   const [selectedQuotation, setSelectedQuotation] = useState(null);
   const [loadingQuotes, setLoadingQuotes] = useState(false);
+
+  // Fetch active signature on mount
+  useEffect(() => {
+    const fetchSignature = async () => {
+      try {
+        const token = localStorage.getItem('reon_admin_token');
+        const res = await fetch(`${API}/api/admin/signature`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.signature?.signature_image_url) {
+            setSignatureUrl(data.signature.signature_image_url);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load active signature', e);
+      }
+    };
+    fetchSignature();
+  }, []);
+
+  // Handle Signature Upload
+  const handleSignatureUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingSig(true);
+    try {
+      const token = localStorage.getItem('reon_admin_token');
+      const formData = new FormData();
+      formData.append('signature', file);
+      formData.append('signerName', 'REON ENERGIES PVT LTD');
+      formData.append('signerTitle', 'Authorized Signatory');
+
+      const res = await fetch(`${API}/api/admin/signature/upload`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      const data = await res.json();
+      if (res.ok && data.signatureUrl) {
+        setSignatureUrl(data.signatureUrl);
+      } else {
+        alert(data.error || 'Failed to upload signature');
+      }
+    } catch (err) {
+      alert('Error uploading signature: ' + err.message);
+    } finally {
+      setUploadingSig(false);
+    }
+  };
+
+  const handleRemoveSignature = async () => {
+    try {
+      const token = localStorage.getItem('reon_admin_token');
+      await fetch(`${API}/api/admin/signature`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      setSignatureUrl(null);
+    } catch (e) {
+      console.error('Failed to remove signature', e);
+    }
+  };
 
   const fetchQuotations = async () => {
     setLoadingQuotes(true);
@@ -156,27 +254,29 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
         setQuotations(Array.isArray(data) ? data : []);
       }
     } catch (err) {
-      console.error('Failed to fetch quotations for invoice linking', err);
+      console.error('Failed to fetch quotations for linking', err);
     } finally {
       setLoadingQuotes(false);
     }
   };
 
-  const fetchNextInvoiceNo = async () => {
+  const fetchNextDocNo = async () => {
     setInvLoading(true);
     try {
       const token = localStorage.getItem('reon_admin_token');
-      const res = await fetch(`${API}/api/admin/invoices/next-number`, {
+      const endpoint = isProforma ? '/api/admin/proforma-invoices/next-number' : '/api/admin/invoices/next-number';
+      const res = await fetch(`${API}${endpoint}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.nextInvoiceNo) {
-          setInvoiceDetails(prev => ({ ...prev, invoiceNo: data.nextInvoiceNo }));
+        const nextNo = isProforma ? data.nextProformaNo : data.nextInvoiceNo;
+        if (nextNo) {
+          setInvoiceDetails(prev => ({ ...prev, invoiceNo: nextNo }));
         }
       }
     } catch (err) {
-      console.error('Failed to fetch next invoice number', err);
+      console.error('Failed to fetch next document number', err);
     } finally {
       setInvLoading(false);
     }
@@ -196,14 +296,31 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
       raw = typeof quote.raw_data === 'string' ? JSON.parse(quote.raw_data) : (quote.raw_data || {});
     } catch (_) {}
 
+    const custName = quote.customer_name || customerDetails.name;
+    const custAddr = raw.address || customerDetails.address;
+    const custPhone = raw.contact_number || raw.contactNumber || raw.mobile || raw.phone || customerDetails.phone;
+    const custEmail = raw.email || customerDetails.email;
+    const custState = raw.state || customerDetails.state;
+
     setCustomerDetails(prev => ({
       ...prev,
-      name: quote.customer_name || prev.name,
-      address: raw.address || prev.address,
-      email: raw.email || prev.email,
-      phone: raw.contact_number || raw.contactNumber || raw.mobile || raw.phone || prev.phone,
-      state: raw.state || prev.state,
+      name: custName,
+      address: custAddr,
+      email: custEmail,
+      phone: custPhone,
+      state: custState,
     }));
+
+    if (sameAsBillTo) {
+      setShipToDetails({
+        name: custName,
+        recipientName: custName,
+        address: custAddr,
+        gstin: '',
+        state: custState,
+        pinCode: '',
+      });
+    }
 
     const kw = raw.system_capacity_kw || raw.capacity || raw.solar_capacity || raw.kw;
     const panelBrand = raw.panel_brand || 'Mono PERC Solar PV Modules';
@@ -224,6 +341,20 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
     ]);
   };
 
+  // Sync Ship To with Bill To whenever sameAsBillTo is true and customer details change
+  useEffect(() => {
+    if (sameAsBillTo) {
+      setShipToDetails(prev => ({
+        ...prev,
+        name: customerDetails.name,
+        recipientName: customerDetails.name,
+        address: customerDetails.address,
+        gstin: customerDetails.gstin,
+        state: customerDetails.state,
+      }));
+    }
+  }, [sameAsBillTo, customerDetails]);
+
   useEffect(() => {
     fetchQuotations();
   }, []);
@@ -236,31 +367,42 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
 
   useEffect(() => {
     if (editData) {
-        try {
-            const parsedCompany = typeof editData.company_details === 'string' ? JSON.parse(editData.company_details) : editData.company_details;
-            const parsedCustomer = typeof editData.customer_details === 'string' ? JSON.parse(editData.customer_details) : editData.customer_details;
-            const parsedInvoice = typeof editData.invoice_details === 'string' ? JSON.parse(editData.invoice_details) : editData.invoice_details;
-            const parsedItems = typeof editData.items === 'string' ? JSON.parse(editData.items) : editData.items;
+      try {
+        const parsedCompany = typeof editData.company_details === 'string' ? JSON.parse(editData.company_details) : editData.company_details;
+        const parsedCustomer = typeof editData.customer_details === 'string' ? JSON.parse(editData.customer_details) : editData.customer_details;
+        const parsedShipTo = typeof editData.ship_to_details === 'string' ? JSON.parse(editData.ship_to_details) : editData.ship_to_details;
+        const parsedInvoice = typeof editData.invoice_details === 'string' ? JSON.parse(editData.invoice_details) : editData.invoice_details;
+        const parsedItems = typeof editData.items === 'string' ? JSON.parse(editData.items) : editData.items;
 
-            setCompanyDetails(parsedCompany || INIT_COMPANY);
-            setCustomerDetails(parsedCustomer || INIT_CUSTOMER);
-            setInvoiceDetails(parsedInvoice || { ...INIT_INVOICE_DETAILS, invoiceNo: `INV/26-27/001` });
-            setItems(parsedItems || [{ id: 1, name: '', description: '', hsn: '', quantity: 1, unit: 'Nos', rate: 0, tax: 18 }]);
-            setStep(0);
-            setSuccessUrl(null);
-            if (editData.quotation_id) {
-              setSelectedQuotation({ id: editData.quotation_id, offer_no: editData.quotation_no, pos_name: editData.pos_name });
-            }
-        } catch(e) {
-            console.error('Error loading editData', e);
+        setCompanyDetails(parsedCompany || INIT_COMPANY);
+        setCustomerDetails(parsedCustomer || INIT_CUSTOMER);
+        if (parsedShipTo) {
+          setShipToDetails(parsedShipTo);
+          setSameAsBillTo(editData.same_as_bill_to !== false);
         }
+        if (editData.authorized_signature_url) {
+          setSignatureUrl(editData.authorized_signature_url);
+        }
+        
+        const docNo = editData.proforma_invoice_no || editData.invoice_no || (isProforma ? 'PI/26-27/001' : 'INV/26-27/001');
+        setInvoiceDetails(parsedInvoice || {
+          ...INIT_INVOICE_DETAILS,
+          invoiceNo: docNo,
+          validUntil: editData.valid_until || INIT_INVOICE_DETAILS.validUntil
+        });
+        setItems(parsedItems || [{ id: 1, name: '', description: '', hsn: '', quantity: 1, unit: 'Nos', rate: 0, tax: 18 }]);
+        setStep(0);
+        setSuccessUrl(null);
+        if (editData.quotation_id) {
+          setSelectedQuotation({ id: editData.quotation_id, offer_no: editData.quotation_no, pos_name: editData.pos_name });
+        }
+      } catch (e) {
+        console.error('Error loading editData', e);
+      }
     } else {
-        fetchNextInvoiceNo();
+      fetchNextDocNo();
     }
-  }, [editData]);
-
-  const fmt = n => (isNaN(n) || n === 0) ? '0.00' : Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
-  const fmtRs = n => `₹ ${fmt(n)}`;
+  }, [editData, isProforma]);
 
   // Calculations
   const calcItem = (item) => {
@@ -297,6 +439,8 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
       const payload = {
         companyDetails,
         customerDetails,
+        shipToDetails: sameAsBillTo ? customerDetails : shipToDetails,
+        sameAsBillTo,
         invoiceDetails,
         items,
         charges,
@@ -304,24 +448,29 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
         cgstTotal: getTaxTotal() / 2,
         sgstTotal: getTaxTotal() / 2,
         grandTotal: getGrandTotal(),
+        validUntil: invoiceDetails.validUntil,
         quotation_id: selectedQuotation?.id || null,
         quotation_no: selectedQuotation?.offer_no || null,
         partner_id: selectedQuotation?.partner_id || null,
         pos_name: selectedQuotation?.pos_name || null,
         pos_id: selectedQuotation?.pos_id || null,
+        authorizedSignatureUrl: signatureUrl || null,
       };
 
-      const response = await fetch(`${API}/api/admin/invoices`, {
+      const endpoint = isProforma ? `${API}/api/admin/proforma-invoices` : `${API}/api/admin/invoices`;
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(payload),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to generate invoice');
+      if (!response.ok) throw new Error(data.error || `Failed to generate ${isProforma ? 'proforma invoice' : 'tax invoice'}`);
       if (data.success && data.pdfUrl) {
-        setSuccessUrl(data.pdfUrl);
+        setSuccessUrl(data.pdfUrl.startsWith('/pdfs/') ? `${API}${data.pdfUrl}` : data.pdfUrl);
+        setGeneratedDocNo(data.proformaInvoiceNo || data.invoiceNo || invoiceDetails.invoiceNo);
+        if (onGenerated) onGenerated(data);
       } else {
-        throw new Error('No PDF URL returned');
+        throw new Error('No PDF URL returned from server');
       }
     } catch (err) {
       setError(err.message);
@@ -345,17 +494,30 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
     switch (step) {
       case 0: return (
         <>
-          {/* Quotation Selection / Linking Section */}
+          {/* Document Type Badge & Quotation Selection / Linking Section */}
           <div style={{
-            background: selectedQuotation ? '#F0FDF4' : '#F8FAFC',
-            border: `1.5px solid ${selectedQuotation ? '#86EFAC' : C.border}`,
+            background: isProforma ? '#F0F9FF' : (selectedQuotation ? '#F0FDF4' : '#F8FAFC'),
+            border: `1.5px solid ${isProforma ? '#7DD3FC' : (selectedQuotation ? '#86EFAC' : C.border)}`,
             borderRadius: 10,
             padding: 16,
             marginBottom: 24
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'between', marginBottom: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: selectedQuotation ? '#166534' : C.navy }}>
-                🔗 Link Existing Quotation (Auto-Convert Lead)
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{
+                  background: isProforma ? '#0369A1' : C.navy,
+                  color: 'white',
+                  fontSize: 10,
+                  fontWeight: 800,
+                  padding: '2px 8px',
+                  borderRadius: 4,
+                  letterSpacing: '0.05em'
+                }}>
+                  {isProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'}
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: C.navy }}>
+                  🔗 Link Existing Quotation (Auto-Populate & Link)
+                </span>
               </div>
               {selectedQuotation && (
                 <button
@@ -371,7 +533,9 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
               )}
             </div>
             <p style={{ fontSize: 11.5, color: C.mid, marginBottom: 12 }}>
-              Select a quotation to automatically link this invoice and mark the originating POS lead as <strong>Converted</strong>.
+              {isProforma
+                ? 'Select a quotation to populate items and link this Proforma Invoice for banking / advance payment clearance.'
+                : 'Select a quotation to automatically link this invoice and mark the originating POS lead as Converted.'}
             </p>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               <select
@@ -383,12 +547,12 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
                   outline: 'none'
                 }}
               >
-                <option value="">-- No quotation linked (Stand-alone invoice) --</option>
+                <option value="">-- No quotation linked (Stand-alone document) --</option>
                 {quotations.map((q) => {
                   const isConverted = q.status === 'converted' || q.invoice_id;
                   return (
                     <option key={q.id} value={q.id}>
-                      {q.offer_no} — {q.customer_name} (₹ {Number(q.total_price || 0).toLocaleString('en-IN')}) — POS: {q.pos_name || 'Admin'} {isConverted ? ' [Converted]' : ' [Pending]'}
+                      {q.offer_no} — {q.customer_name} ({fmtRs(q.total_price || 0)}) — POS: {q.pos_name || 'Admin'} {isConverted ? ' [Converted]' : ' [Pending]'}
                     </option>
                   );
                 })}
@@ -406,20 +570,20 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
               </button>
             </div>
             {selectedQuotation && (
-              <div style={{ marginTop: 10, fontSize: 12, color: '#15803D', fontWeight: 500, display: 'flex', gap: 16 }}>
+              <div style={{ marginTop: 10, fontSize: 12, color: '#15803D', fontWeight: 500, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                 <span>✓ Linked: <strong>{selectedQuotation.offer_no}</strong></span>
                 <span>POS: <strong>{selectedQuotation.pos_name || 'Admin'}</strong></span>
                 <span>Customer: <strong>{selectedQuotation.customer_name}</strong></span>
-                <span>Amount: <strong>₹ {Number(selectedQuotation.total_price || 0).toLocaleString('en-IN')}</strong></span>
+                <span>Amount: <strong>{fmtRs(selectedQuotation.total_price || 0)}</strong></span>
               </div>
             )}
           </div>
 
-          <SectionHead title="Invoice Details" />
+          <SectionHead title={`${isProforma ? 'Proforma' : 'Tax'} Document Details`} />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
             <div style={{ flex: '0 0 calc(50% - 6px)', minWidth: 0 }}>
               <label style={{ fontSize: 12, fontWeight: 600, color: C.teal, display: 'block', marginBottom: 4 }}>
-                Invoice No (Auto-Generated) <span style={{ color: C.orange }}>*</span>
+                {isProforma ? 'Proforma Invoice No' : 'Invoice No'} (Auto-Generated) <span style={{ color: C.orange }}>*</span>
               </label>
               <div style={{ display: 'flex', gap: 8 }}>
                 <input
@@ -436,7 +600,7 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
                 />
                 <button
                   type="button"
-                  onClick={fetchNextInvoiceNo}
+                  onClick={fetchNextDocNo}
                   disabled={invLoading}
                   style={{
                     padding: '9px 14px', background: C.teal, color: 'white', border: 'none',
@@ -447,41 +611,202 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
                 </button>
               </div>
             </div>
-            <Field label="Invoice Date" name="invoiceDate" value={invoiceDetails.invoiceDate} onChange={updateObj(setInvoiceDetails)} type="date" half />
-            <Field label="Due Date" name="dueDate" value={invoiceDetails.dueDate} onChange={updateObj(setInvoiceDetails)} type="date" half />
-            <Field label="E-way Bill No" name="ewayBillNumber" value={invoiceDetails.ewayBillNumber} onChange={updateObj(setInvoiceDetails)} half />
+            <Field label={isProforma ? "Proforma Date" : "Invoice Date"} name="invoiceDate" value={invoiceDetails.invoiceDate} onChange={updateObj(setInvoiceDetails)} type="date" half />
+            {isProforma ? (
+              <Field label="Validity Date (Valid Until)" name="validUntil" value={invoiceDetails.validUntil} onChange={updateObj(setInvoiceDetails)} type="date" half />
+            ) : (
+              <Field label="Due Date" name="dueDate" value={invoiceDetails.dueDate} onChange={updateObj(setInvoiceDetails)} type="date" half />
+            )}
+            <Field label="E-way Bill No (Optional)" name="ewayBillNumber" value={invoiceDetails.ewayBillNumber} onChange={updateObj(setInvoiceDetails)} half />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-            <div>
-              <SectionHead title="Customer (Bill To) *" />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <Field label="Customer Name" name="name" value={customerDetails.name} onChange={updateObj(setCustomerDetails)} required />
-                <Field label="Address" name="address" value={customerDetails.address} onChange={updateObj(setCustomerDetails)} />
-                <div style={{ display: 'flex', gap: 12 }}>
-                  <Field label="Mobile Number" name="phone" value={customerDetails.phone} onChange={updateObj(setCustomerDetails)} half />
-                  <Field label="Email Address" type="email" name="email" value={customerDetails.email} onChange={updateObj(setCustomerDetails)} half />
+          {/* BILL TO & SHIP TO SECTION */}
+          <div style={{ background: '#F8FAFC', border: `1px solid ${C.border}`, borderRadius: 10, padding: 16, marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, borderBottom: `1px solid ${C.border}`, paddingBottom: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.navy, letterSpacing: '0.03em' }}>
+                BILL TO &nbsp;|&nbsp; SHIP TO
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: C.navy, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={sameAsBillTo}
+                  onChange={(e) => setSameAsBillTo(e.target.checked)}
+                  style={{ width: 16, height: 16, accentColor: C.teal, cursor: 'pointer' }}
+                />
+                <span>Same as Bill To</span>
+              </label>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+              {/* BILL TO */}
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.teal, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span>🏢 Bill To (Customer Details)</span>
+                  <span style={{ color: C.orange }}>*</span>
                 </div>
-                <div style={{ display: 'flex', gap: 12 }}>
-                  <Field label="GSTIN" name="gstin" value={customerDetails.gstin} onChange={updateObj(setCustomerDetails)} half />
-                  <Field label="State" name="state" value={customerDetails.state} onChange={updateObj(setCustomerDetails)} half />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <Field label="Customer / Company Name" name="name" value={customerDetails.name} onChange={updateObj(setCustomerDetails)} required />
+                  <Field label="Billing Address" name="address" value={customerDetails.address} onChange={updateObj(setCustomerDetails)} />
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <Field label="Mobile Number" name="phone" value={customerDetails.phone} onChange={updateObj(setCustomerDetails)} half />
+                    <Field label="Email Address" type="email" name="email" value={customerDetails.email} onChange={updateObj(setCustomerDetails)} half />
+                  </div>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <Field label="GSTIN" name="gstin" value={customerDetails.gstin} onChange={updateObj(setCustomerDetails)} half />
+                    <Field label="State" name="state" value={customerDetails.state} onChange={updateObj(setCustomerDetails)} half />
+                  </div>
+                </div>
+              </div>
+
+              {/* SHIP TO */}
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.teal, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span>🚚 Ship To (Delivery Details)</span>
+                  {sameAsBillTo && <span style={{ fontSize: 11, color: C.mid, fontWeight: 400 }}>(Synchronized)</span>}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <Field
+                    label="Shipping Entity / Company Name"
+                    name="name"
+                    value={sameAsBillTo ? customerDetails.name : shipToDetails.name}
+                    onChange={updateObj(setShipToDetails)}
+                    readOnly={sameAsBillTo}
+                  />
+                  <Field
+                    label="Recipient Contact Person"
+                    name="recipientName"
+                    value={sameAsBillTo ? customerDetails.name : shipToDetails.recipientName}
+                    onChange={updateObj(setShipToDetails)}
+                    readOnly={sameAsBillTo}
+                  />
+                  <Field
+                    label="Shipping Address"
+                    name="address"
+                    value={sameAsBillTo ? customerDetails.address : shipToDetails.address}
+                    onChange={updateObj(setShipToDetails)}
+                    readOnly={sameAsBillTo}
+                  />
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <Field
+                      label="Shipping State"
+                      name="state"
+                      value={sameAsBillTo ? customerDetails.state : shipToDetails.state}
+                      onChange={updateObj(setShipToDetails)}
+                      readOnly={sameAsBillTo}
+                      half
+                    />
+                    <Field
+                      label="PIN Code"
+                      name="pinCode"
+                      value={sameAsBillTo ? '' : shipToDetails.pinCode}
+                      onChange={updateObj(setShipToDetails)}
+                      readOnly={sameAsBillTo}
+                      half
+                    />
+                  </div>
+                  <Field
+                    label="Shipping GSTIN (if applicable)"
+                    name="gstin"
+                    value={sameAsBillTo ? customerDetails.gstin : shipToDetails.gstin}
+                    onChange={updateObj(setShipToDetails)}
+                    readOnly={sameAsBillTo}
+                  />
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* COMPANY & SIGNATURE SECTION */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 20 }}>
             <div>
               <SectionHead title="Company (Issuer - Fixed)" />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <Field label="Legal Name" name="name" value={companyDetails.name} readOnly />
                 <Field label="Address" name="address" value={companyDetails.address} readOnly />
-                <div style={{ display: 'flex', gap: 12 }}>
+                <div style={{ display: 'flex', gap: 10 }}>
                   <Field label="GSTIN" name="gstin" value={companyDetails.gstin} readOnly half />
                   <Field label="PAN" name="pan" value={companyDetails.pan} readOnly half />
                 </div>
-                <div style={{ display: 'flex', gap: 12 }}>
+                <div style={{ display: 'flex', gap: 10 }}>
                   <Field label="A/C No" name="accountNumber" value={companyDetails.accountNumber} readOnly half />
                   <Field label="IFSC Code" name="ifsc" value={companyDetails.ifsc} readOnly half />
                 </div>
                 <Field label="Bank Name" name="bankName" value={`${companyDetails.bankName} - ${companyDetails.branch}`} readOnly />
+              </div>
+            </div>
+
+            {/* AUTHORIZED SIGNATURE CARD */}
+            <div>
+              <SectionHead title="Authorized Signature" />
+              <div style={{
+                border: `1.5px dashed ${signatureUrl ? C.teal : C.border}`,
+                borderRadius: 10,
+                padding: 16,
+                textAlign: 'center',
+                background: signatureUrl ? '#F0FDF4' : C.light,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: 180
+              }}>
+                {signatureUrl ? (
+                  <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <div style={{ background: 'white', padding: 8, borderRadius: 6, border: `1px solid ${C.border}`, marginBottom: 8 }}>
+                      <img
+                        src={signatureUrl.startsWith('/uploads/') ? `${API}${signatureUrl}` : signatureUrl}
+                        alt="Authorized Signature"
+                        style={{ maxHeight: 75, maxWidth: '100%', objectFit: 'contain' }}
+                      />
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: C.navy }}>For REON ENERGIES PVT LTD</div>
+                    <div style={{ fontSize: 10, color: C.mid, fontStyle: 'italic', marginTop: 2 }}>
+                      System-generated bill signed attached
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+                      <button
+                        type="button"
+                        onClick={() => sigFileInputRef.current?.click()}
+                        style={{ fontSize: 11, color: C.teal, background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}
+                      >
+                        Change
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRemoveSignature}
+                        style={{ fontSize: 11, color: C.red, background: 'none', border: 'none', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ fontSize: 24, marginBottom: 6 }}>✍️</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: C.navy, marginBottom: 4 }}>No Signature Attached</div>
+                    <p style={{ fontSize: 11, color: C.mid, marginBottom: 12 }}>
+                      Upload authorized stamp/signature (PNG, JPG) to attach to this invoice.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => sigFileInputRef.current?.click()}
+                      disabled={uploadingSig}
+                      style={{
+                        padding: '7px 14px', background: C.teal, color: 'white', border: 'none',
+                        borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer'
+                      }}
+                    >
+                      {uploadingSig ? 'Uploading...' : 'Upload Signature'}
+                    </button>
+                  </div>
+                )}
+                <input
+                  type="file"
+                  ref={sigFileInputRef}
+                  onChange={handleSignatureUpload}
+                  accept="image/png,image/jpeg,image/jpg"
+                  style={{ display: 'none' }}
+                />
               </div>
             </div>
           </div>
@@ -503,24 +828,33 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
                   {items.length > 1 && <button onClick={() => removeItem(item.id)} style={{ color: C.red, fontSize: 11, fontWeight: 600, border: 'none', background: 'none', cursor: 'pointer' }}>Remove</button>}
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  <div style={{ flex: '1 1 30%', minWidth: 200 }}><Field label="Item Name *" name="name" value={item.name} onChange={e => updateItem(item.id, 'name', e.target.value)} /></div>
+                  <div style={{ flex: '1 1 30%', minWidth: 200 }}>
+                    <Field label="Item Name *" name="name" value={item.name} onChange={e => updateItem(item.id, 'name', e.target.value)} />
+                  </div>
                   <div style={{ flex: '1 1 20%', minWidth: 120 }}>
                     <Field label="HSN Code" name="hsn" value={item.hsn} list="hsn-codes" onChange={e => {
                       const val = e.target.value;
                       updateItem(item.id, 'hsn', val);
-                      // Auto-fill GST rate if matching HSN
                       const match = HSN_DATA.find(h => h.hsn === val);
                       if (match) updateItem(item.id, 'tax', match.rate);
                     }} />
                   </div>
-                  <div style={{ flex: '1 1 10%', minWidth: 60 }}><Field label="Qty" name="quantity" type="number" value={item.quantity} onChange={e => updateItem(item.id, 'quantity', e.target.value)} /></div>
-                  <div style={{ flex: '1 1 10%', minWidth: 80 }}><Field label="Unit" name="unit" options={['Nos', 'Pieces', 'Set', 'Lot', 'Meters', 'Foot', 'Inch', 'Sq.ft', 'Kgs', 'kW', 'Watts', 'Rolls']} value={item.unit || 'Nos'} onChange={e => updateItem(item.id, 'unit', e.target.value)} /></div>
-                  <div style={{ flex: '1 1 15%', minWidth: 80 }}><Field label="Rate (₹)" name="rate" type="number" value={item.rate} onChange={e => updateItem(item.id, 'rate', e.target.value)} /></div>
-                  <div style={{ flex: '1 1 10%', minWidth: 60 }}><Field label="Tax %" name="tax" options={[0, 5, 12, 18, 28]} value={item.tax} onChange={e => updateItem(item.id, 'tax', e.target.value)} /></div>
+                  <div style={{ flex: '1 1 10%', minWidth: 60 }}>
+                    <Field label="Qty" name="quantity" type="number" value={item.quantity} onChange={e => updateItem(item.id, 'quantity', e.target.value)} />
+                  </div>
+                  <div style={{ flex: '1 1 10%', minWidth: 80 }}>
+                    <Field label="Unit" name="unit" options={['Nos', 'Pieces', 'Set', 'Lot', 'Meters', 'Foot', 'Inch', 'Sq.ft', 'Kgs', 'kW', 'Watts', 'Rolls']} value={item.unit || 'Nos'} onChange={e => updateItem(item.id, 'unit', e.target.value)} />
+                  </div>
+                  <div style={{ flex: '1 1 15%', minWidth: 80 }}>
+                    <Field label="Rate (₹)" name="rate" type="number" value={item.rate} onChange={e => updateItem(item.id, 'rate', e.target.value)} />
+                  </div>
+                  <div style={{ flex: '1 1 10%', minWidth: 60 }}>
+                    <Field label="Tax %" name="tax" options={[0, 5, 12, 18, 28]} value={item.tax} onChange={e => updateItem(item.id, 'tax', e.target.value)} />
+                  </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10, fontSize: 12 }}>
-                  <span style={{ color: C.mid, marginRight: 10 }}>Total: <b style={{ color: C.navy }}>{fmtRs(calcItem(item).total)}</b></span>
-                  <span style={{ color: C.mid }}>Tax: <b style={{ color: C.teal }}>{fmtRs(calcItem(item).taxAmt)}</b></span>
+                  <span style={{ color: C.mid, marginRight: 16 }}>Taxable: <b style={{ color: C.navy }}>{fmtRs(calcItem(item).total)}</b></span>
+                  <span style={{ color: C.mid }}>Tax ({item.tax}%): <b style={{ color: C.teal }}>{fmtRs(calcItem(item).taxAmt)}</b></span>
                 </div>
               </div>
             ))}
@@ -535,25 +869,28 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
       );
       case 2: return (
         <>
-          <SectionHead title="Invoice Summary" />
+          <SectionHead title={`${isProforma ? 'Proforma' : 'Tax'} Document Summary`} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
             <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.navy, marginBottom: 6 }}>INVOICE TO</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.navy, marginBottom: 6 }}>DOCUMENT DETAILS</div>
               <RRow label="Customer" value={customerDetails.name} bold />
-              <RRow label="GSTIN" value={customerDetails.gstin} />
-              <RRow label="Inv No" value={invoiceDetails.invoiceNo} bold />
+              <RRow label="Customer GSTIN" value={customerDetails.gstin} />
+              <RRow label={isProforma ? "PI No" : "Inv No"} value={invoiceDetails.invoiceNo} bold />
               <RRow label="Date" value={invoiceDetails.invoiceDate} />
+              {isProforma && <RRow label="Valid Until" value={invoiceDetails.validUntil} />}
+              <RRow label="Ship To" value={sameAsBillTo ? `${customerDetails.name} (Same as Bill To)` : `${shipToDetails.name || customerDetails.name}, ${shipToDetails.address || ''}`} />
               <RRow label="Items Count" value={items.length} />
+              {selectedQuotation && <RRow label="Quotation Ref" value={selectedQuotation.offer_no} />}
             </div>
             <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: C.navy, marginBottom: 6 }}>CALCULATIONS</div>
-              <RRow label="Subtotal" value={fmtRs(getSubtotal())} />
-              <RRow label="CGST" value={fmtRs(getTaxTotal()/2)} />
-              <RRow label="SGST" value={fmtRs(getTaxTotal()/2)} />
-              {charges.loadingCharges > 0 && <RRow label="Loading" value={fmtRs(charges.loadingCharges)} />}
-              <div style={{ background: C.orange, borderRadius: 6, padding: '10px 14px', marginTop: 8, display: 'flex', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.navy, marginBottom: 6 }}>FINANCIAL BREAKDOWN</div>
+              <RRow label="Subtotal (Taxable)" value={fmtRs(getSubtotal())} />
+              <RRow label="CGST" value={fmtRs(getTaxTotal() / 2)} />
+              <RRow label="SGST" value={fmtRs(getTaxTotal() / 2)} />
+              {charges.loadingCharges > 0 && <RRow label="Loading Charges" value={fmtRs(charges.loadingCharges)} />}
+              <div style={{ background: C.orange, borderRadius: 6, padding: '10px 14px', marginTop: 12, display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'white', fontWeight: 700, fontSize: 12 }}>Grand Total</span>
-                <span style={{ color: 'white', fontWeight: 800, fontSize: 14 }}>{fmtRs(getGrandTotal())}</span>
+                <span style={{ color: 'white', fontWeight: 800, fontSize: 15 }}>{fmtRs(getGrandTotal())}</span>
               </div>
             </div>
           </div>
@@ -564,15 +901,23 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
   };
 
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif', color: C.text, maxWidth: 820, margin: '0 auto' }}>
-      <div style={{ background: C.navy, borderRadius: 10, padding: '14px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
+    <div style={{ fontFamily: 'system-ui, sans-serif', color: C.text, maxWidth: 880, margin: '0 auto' }}>
+      <div style={{ background: isProforma ? '#0369A1' : C.navy, borderRadius: 10, padding: '14px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ background: C.orange, borderRadius: 6, padding: '4px 12px', fontWeight: 700, color: 'white', fontSize: 14 }}>REON</div>
         <div style={{ flex: 1 }}>
-          <div style={{ color: 'white', fontWeight: 700, fontSize: 15 }}>{editData ? 'Edit Tax Invoice' : 'Tax Invoice Generator'}</div>
-          <div style={{ color: '#AABBDD', fontSize: 11 }}>Professional GST output · PDF watermarks · Multi-page</div>
+          <div style={{ color: 'white', fontWeight: 700, fontSize: 15 }}>
+            {editData ? (isProforma ? 'Edit Proforma Invoice' : 'Edit Tax Invoice') : (isProforma ? 'Proforma Invoice Generator' : 'Tax Invoice Generator')}
+          </div>
+          <div style={{ color: '#E0F2FE', fontSize: 11 }}>
+            {isProforma
+              ? 'Bank submission · Advance payment clearance · Single-click conversion to Tax Invoice'
+              : 'GST Compliant · Linked POS Conversion · Standard Accounting ReportLab PDF'}
+          </div>
         </div>
         {editData && (
-          <button onClick={onClearEdit} style={{ background: 'rgba(255,255,255,0.1)', color: 'white', border: '1px solid rgba(255,255,255,0.2)', padding: '6px 12px', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>Cancel Edit</button>
+          <button onClick={onClearEdit} style={{ background: 'rgba(255,255,255,0.15)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', padding: '6px 12px', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
+            Cancel Edit
+          </button>
         )}
       </div>
       <ProgressBar />
@@ -584,16 +929,28 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 18, gap: 10 }}>
         {successUrl ? (
           <>
-            <button onClick={() => { setStep(0); setSuccessUrl(null); }} style={{ padding: '10px 24px', border: `1.5px solid ${C.border}`, borderRadius: 8, background: 'white', color: C.text, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Create Another</button>
-            <a href={successUrl} target="_blank" rel="noreferrer" download style={{ padding: '10px 32px', border: 'none', borderRadius: 8, background: C.green, color: 'white', textDecoration: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'inline-block' }}>⬇ Download PDF</a>
+            <button onClick={() => { setStep(0); setSuccessUrl(null); }} style={{ padding: '10px 24px', border: `1.5px solid ${C.border}`, borderRadius: 8, background: 'white', color: C.text, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+              Create Another
+            </button>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <a href={successUrl} target="_blank" rel="noreferrer" download style={{ padding: '10px 32px', border: 'none', borderRadius: 8, background: C.green, color: 'white', textDecoration: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'inline-block' }}>
+                ⬇ Download {isProforma ? 'Proforma' : 'Invoice'} PDF ({generatedDocNo})
+              </a>
+            </div>
           </>
         ) : (
           <>
-            <button onClick={() => setStep(Math.max(step-1, 0))} disabled={step === 0 || loading} style={{ padding: '10px 24px', border: `1.5px solid ${C.border}`, borderRadius: 8, background: 'white', color: C.text, fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: step === 0 ? 0.4 : 1 }}>← Back</button>
+            <button onClick={() => setStep(Math.max(step - 1, 0))} disabled={step === 0 || loading} style={{ padding: '10px 24px', border: `1.5px solid ${C.border}`, borderRadius: 8, background: 'white', color: C.text, fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: step === 0 ? 0.4 : 1 }}>
+              ← Back
+            </button>
             {step < STEPS.length - 1 ? (
-              <button onClick={() => setStep(Math.min(step+1, STEPS.length-1))} disabled={!isValid()} style={{ padding: '10px 28px', border: 'none', borderRadius: 8, background: isValid() ? C.navy : C.border, color: 'white', fontWeight: 700, fontSize: 13, cursor: isValid() ? 'pointer' : 'not-allowed', transition: 'background .2s' }}>Next →</button>
+              <button onClick={() => setStep(Math.min(step + 1, STEPS.length - 1))} disabled={!isValid()} style={{ padding: '10px 28px', border: 'none', borderRadius: 8, background: isValid() ? (isProforma ? '#0369A1' : C.navy) : C.border, color: 'white', fontWeight: 700, fontSize: 13, cursor: isValid() ? 'pointer' : 'not-allowed', transition: 'background .2s' }}>
+                Next →
+              </button>
             ) : (
-              <button onClick={handleSubmit} disabled={loading || !isValid()} style={{ padding: '10px 32px', border: 'none', borderRadius: 8, background: C.orange, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: loading ? 0.7 : 1 }}>{loading ? '⏳ Generating…' : '📄 Generate Invoice PDF'}</button>
+              <button onClick={handleSubmit} disabled={loading || !isValid()} style={{ padding: '10px 32px', border: 'none', borderRadius: 8, background: C.orange, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: loading ? 0.7 : 1 }}>
+                {loading ? '⏳ Generating…' : `📄 Generate ${isProforma ? 'Proforma' : 'Tax'} Invoice PDF`}
+              </button>
             )}
           </>
         )}

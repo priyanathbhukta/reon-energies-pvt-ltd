@@ -40,17 +40,56 @@ router.get('/:filename', async (req, res, next) => {
       
       const inv = result.rows[0];
       const payload = {
+        isProforma: false,
+        documentType: 'TAX INVOICE',
         companyDetails: typeof inv.company_details === 'string' ? JSON.parse(inv.company_details) : inv.company_details,
         customerDetails: typeof inv.customer_details === 'string' ? JSON.parse(inv.customer_details) : inv.customer_details,
+        shipToDetails: typeof inv.ship_to_details === 'string' ? JSON.parse(inv.ship_to_details) : inv.ship_to_details,
+        sameAsBillTo: inv.same_as_bill_to !== false,
         invoiceDetails: typeof inv.invoice_details === 'string' ? JSON.parse(inv.invoice_details) : inv.invoice_details,
         items: typeof inv.items === 'string' ? JSON.parse(inv.items) : inv.items,
         subtotal: inv.subtotal,
         cgstTotal: inv.cgst_total,
         sgstTotal: inv.sgst_total,
         grandTotal: inv.grand_total,
+        proformaInvoiceNo: inv.proforma_invoice_no,
+        quotationNo: inv.quotation_no,
+        authorizedSignatureUrl: inv.authorized_signature_url,
       };
 
       console.log(`[PDF] Auto-regenerating missing Invoice: ${filename}`);
+      await execFileAsync(runPythonCommand, [INVOICE_SCRIPT, '--output', filePath], {
+        env: { ...process.env, REON_INVOICE_JSON: JSON.stringify(payload) },
+        timeout: 60000,
+      });
+
+    } else if (filename.startsWith('PI-')) {
+      const result = await pool.query('SELECT * FROM proforma_invoices WHERE pdf_url LIKE $1', [`%${filename}%`]);
+      
+      if (result.rows.length === 0) {
+        return res.status(404).send('Proforma Invoice not found');
+      }
+      
+      const pi = result.rows[0];
+      const payload = {
+        isProforma: true,
+        documentType: 'PROFORMA INVOICE',
+        companyDetails: typeof pi.company_details === 'string' ? JSON.parse(pi.company_details) : pi.company_details,
+        customerDetails: typeof pi.customer_details === 'string' ? JSON.parse(pi.customer_details) : pi.customer_details,
+        shipToDetails: typeof pi.ship_to_details === 'string' ? JSON.parse(pi.ship_to_details) : pi.ship_to_details,
+        sameAsBillTo: pi.same_as_bill_to !== false,
+        invoiceDetails: typeof pi.invoice_details === 'string' ? JSON.parse(pi.invoice_details) : pi.invoice_details,
+        items: typeof pi.items === 'string' ? JSON.parse(pi.items) : pi.items,
+        charges: typeof pi.charges === 'string' ? JSON.parse(pi.charges) : pi.charges,
+        subtotal: pi.subtotal,
+        cgstTotal: pi.cgst_total,
+        sgstTotal: pi.sgst_total,
+        grandTotal: pi.grand_total,
+        quotationNo: pi.quotation_no,
+        authorizedSignatureUrl: pi.authorized_signature_url,
+      };
+
+      console.log(`[PDF] Auto-regenerating missing Proforma Invoice: ${filename}`);
       await execFileAsync(runPythonCommand, [INVOICE_SCRIPT, '--output', filePath], {
         env: { ...process.env, REON_INVOICE_JSON: JSON.stringify(payload) },
         timeout: 60000,
