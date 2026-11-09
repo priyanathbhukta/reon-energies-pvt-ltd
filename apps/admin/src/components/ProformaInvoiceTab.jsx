@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { API } from '@/lib/legacy-api';
+import { downloadPdfFile } from '@/lib/download';
 import {
   FileText, Search, RefreshCw, Plus, FileDown,
   CheckCircle, ArrowRight, AlertCircle, Trash2, Edit2, ShieldAlert
@@ -335,15 +336,14 @@ export default function ProformaInvoiceTab({ onNavigateToInvoice }) {
                             <div className="flex items-center justify-end gap-2">
                               {/* PDF Download */}
                               {pdfFullUrl ? (
-                                <a
-                                  href={pdfFullUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="p-1.5 text-sky-600 hover:bg-sky-50 rounded-lg transition"
-                                  title="Download Proforma PDF"
+                                <button
+                                  type="button"
+                                  onClick={() => downloadPdfFile(pdfFullUrl, `${pi.proforma_invoice_no?.replace(/\//g, '_') || 'Proforma'}.pdf`)}
+                                  className="p-1.5 text-sky-600 hover:bg-sky-50 rounded-lg transition cursor-pointer"
+                                  title="Download Proforma PDF to Device"
                                 >
                                   <FileDown className="w-4 h-4" />
-                                </a>
+                                </button>
                               ) : null}
 
                               {/* Prominent CTA: Generate Original Invoice */}
@@ -417,14 +417,16 @@ export default function ProformaInvoiceTab({ onNavigateToInvoice }) {
                 </p>
                 <div className="flex justify-center gap-3 mt-6">
                   {convertModal.successResult.pdfUrl && (
-                    <a
-                      href={convertModal.successResult.pdfUrl.startsWith('/pdfs/') ? `${API}${convertModal.successResult.pdfUrl}` : convertModal.successResult.pdfUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition"
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const u = convertModal.successResult.pdfUrl;
+                        downloadPdfFile(u.startsWith('/pdfs/') ? `${API}${u}` : u, `${convertModal.successResult.invoiceNo?.replace(/\//g, '_') || 'Tax_Invoice'}.pdf`);
+                      }}
+                      className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition cursor-pointer"
                     >
                       ⬇ Download Tax Invoice PDF
-                    </a>
+                    </button>
                   )}
                   <button
                     onClick={() => setConvertModal({ isOpen: false, proforma: null, loading: false, error: null, successResult: null })}

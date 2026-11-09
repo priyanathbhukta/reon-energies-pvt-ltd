@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/auth-store';
 import { Loader2, RefreshCw, FileText, Download, CheckCircle2 } from 'lucide-react';
+import { downloadPdfFile } from '@/lib/download';
 
 /* ── Colour tokens matching the REON brand ──────────────────────────────── */
 const C = {
@@ -690,16 +691,14 @@ export default function QuotationForm({ editData, onClearEdit, onSuccess }: Quot
               >
                 Create Another
               </button>
-              <a
-                href={successUrl}
-                target="_blank"
-                rel="noreferrer"
-                download
-                className="flex-1 sm:flex-none px-5 py-2 rounded-lg bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 transition-colors inline-flex items-center justify-center gap-1.5 shadow-sm"
+              <button
+                type="button"
+                onClick={() => downloadPdfFile(successUrl.startsWith('/pdfs/') ? `${process.env.NEXT_PUBLIC_API_URL || 'https://api.reonenergy.in'}${successUrl}` : successUrl, `Quotation_${offerNo?.replace(/\//g, '_') || 'REON'}.pdf`)}
+                className="flex-1 sm:flex-none px-5 py-2 rounded-lg bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 transition-colors inline-flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5" />
-                Download PDF
-              </a>
+                Download PDF to Device
+              </button>
             </div>
           </div>
         ) : (

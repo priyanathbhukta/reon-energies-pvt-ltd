@@ -1,6 +1,7 @@
 // frontend/src/components/QuotationForm.jsx
 import React, { useState, useEffect } from 'react';
 import { API } from '@/lib/legacy-api';
+import { downloadPdfFile } from '@/lib/download';
 
 
 /* ── Colour tokens matching the REON brand ──────────────────────────────── */
@@ -751,11 +752,13 @@ export default function QuotationForm({ editData, onClearEdit }) {
                     style={{ padding: '10px 24px', border: `1.5px solid ${C.border}`, borderRadius: 8, background: 'white', color: C.text, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
               Create Another
             </button>
-            <a href={successUrl} target="_blank" rel="noreferrer"
-               download
-               style={{ padding: '10px 32px', border: 'none', borderRadius: 8, background: C.green, color: 'white', textDecoration: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'inline-block' }}>
-              ⬇ Download PDF
-            </a>
+            <button
+              type="button"
+              onClick={() => downloadPdfFile(successUrl.startsWith('/pdfs/') ? `${API}${successUrl}` : successUrl, `Quotation_${offerNo?.replace(/\//g, '_') || 'REON'}.pdf`)}
+              style={{ padding: '10px 32px', border: 'none', borderRadius: 8, background: C.green, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'inline-block' }}
+            >
+              ⬇ Download Quotation PDF
+            </button>
           </>
         ) : (
           <>

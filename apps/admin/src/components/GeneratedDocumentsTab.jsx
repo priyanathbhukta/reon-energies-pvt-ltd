@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { API } from '@/lib/legacy-api';
+import { downloadPdfFile } from '@/lib/download';
 import {
   FileText, Search, RefreshCw, FileDown, Trash2, Edit2,
   CheckCircle2, Clock, AlertTriangle, X, Plus, ChevronRight,
@@ -537,15 +538,14 @@ export default function GeneratedDocumentsTab({ onEditInvoice, onEditQuotation }
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             {pdfFullUrl && (
-                              <a
-                                href={pdfFullUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="p-1.5 text-emerald hover:bg-emerald/10 rounded-lg transition"
-                                title="Download Invoice PDF"
+                              <button
+                                type="button"
+                                onClick={() => downloadPdfFile(pdfFullUrl, `${inv.invoice_no?.replace(/\//g, '_') || 'Invoice'}.pdf`)}
+                                className="p-1.5 text-emerald hover:bg-emerald/10 rounded-lg transition cursor-pointer"
+                                title="Download Invoice PDF to Device"
                               >
                                 <FileDown className="w-4 h-4" />
-                              </a>
+                              </button>
                             )}
                             <button
                               type="button"
@@ -661,15 +661,14 @@ export default function GeneratedDocumentsTab({ onEditInvoice, onEditQuotation }
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             {pdfFullUrl && (
-                              <a
-                                href={pdfFullUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="p-1.5 text-emerald hover:bg-emerald/10 rounded-lg transition"
-                                title="Download Quotation PDF"
+                              <button
+                                type="button"
+                                onClick={() => downloadPdfFile(pdfFullUrl, `${q.offer_no?.replace(/\//g, '_') || 'Quotation'}.pdf`)}
+                                className="p-1.5 text-emerald hover:bg-emerald/10 rounded-lg transition cursor-pointer"
+                                title="Download Quotation PDF to Device"
                               >
                                 <FileDown className="w-4 h-4" />
-                              </a>
+                              </button>
                             )}
                             {q.raw_data && (
                               <button

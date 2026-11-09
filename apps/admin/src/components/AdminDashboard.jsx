@@ -26,20 +26,37 @@ const STATUS_CONFIG = {
     lost: { label: 'Lost', color: 'bg-red-100 text-red-700' },
 }
 
-const TABS = [
-    { id: 'enquiries', label: 'Enquiries', icon: Users },
-    { id: 'pos_partners', label: 'POS Partners', icon: UserPlus },
-    { id: 'leads', label: 'POS Leads', icon: TrendingUp },
-    { id: 'projects', label: 'Projects', icon: Building2 },
-    { id: 'schemes', label: 'Schemes', icon: FileText },
-    { id: 'testimonials', label: 'Testimonials', icon: MessageSquare },
-    { id: 'gallery', label: 'Gallery', icon: Image },
-    { id: 'directors', label: 'Directors', icon: Briefcase },
-    { id: 'quotation', label: 'Quotation Generator', icon: Calculator },
-    { id: 'proforma_invoice', label: 'Proforma Invoice', icon: FileCheck },
-    { id: 'invoice', label: 'Tax Invoice Generator', icon: FileDown },
-    { id: 'documents', label: 'Generated Documents', icon: FolderOpen },
-]
+const NAV_GROUPS = [
+    {
+        title: 'Operations & Leads',
+        tabs: [
+            { id: 'enquiries', label: 'Enquiries', icon: Users },
+            { id: 'pos_partners', label: 'POS Partners', icon: UserPlus },
+            { id: 'leads', label: 'POS Leads', icon: TrendingUp },
+            { id: 'projects', label: 'Projects', icon: Building2 },
+        ]
+    },
+    {
+        title: 'Billing & Documents',
+        tabs: [
+            { id: 'quotation', label: 'Quotation Generator', icon: Calculator },
+            { id: 'proforma_invoice', label: 'Proforma Invoice', icon: FileCheck, badge: 'NEW' },
+            { id: 'invoice', label: 'Invoice Generator', icon: FileDown },
+            { id: 'documents', label: 'Generated Documents', icon: FolderOpen },
+        ]
+    },
+    {
+        title: 'Website Content',
+        tabs: [
+            { id: 'schemes', label: 'Schemes', icon: FileText },
+            { id: 'testimonials', label: 'Testimonials', icon: MessageSquare },
+            { id: 'gallery', label: 'Gallery', icon: Image },
+            { id: 'directors', label: 'Directors', icon: Briefcase },
+        ]
+    }
+];
+
+const TABS = NAV_GROUPS.flatMap(g => g.tabs);
 
 export default function AdminDashboard() {
     const router = useRouter()
@@ -235,29 +252,45 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* Navigation */}
-                <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-                    {TABS.map(tab => (
-                        <button
-                            key={tab.id}
-                            onClick={() => { setActiveTab(tab.id); setIsSidebarOpen(false); }}
-                            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                                activeTab === tab.id
-                                    ? 'bg-emerald text-white shadow-sm'
-                                    : 'text-gray-600 hover:text-navy hover:bg-gray-50'
-                            }`}
-                        >
-                            <div className="flex items-center gap-3">
-                                <tab.icon className={`w-4.5 h-4.5 ${activeTab === tab.id ? 'text-white' : 'text-gray-400'}`} />
-                                {tab.label}
+                <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-4">
+                    {NAV_GROUPS.map((group) => (
+                        <div key={group.title} className="space-y-1">
+                            <div className="px-3 pb-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                                {group.title}
                             </div>
-                            {(tab.id !== 'quotation' && tab.id !== 'invoice' && tab.id !== 'documents') && (
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                    activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
-                                }`}>
-                                    {tab.id === 'enquiries' ? enquiries.length : tab.id === 'pos_partners' ? posPartners.length : tab.id === 'leads' ? leads.length : tab.id === 'schemes' ? schemes.length : tab.id === 'testimonials' ? testimonials.length : tab.id === 'directors' ? directors.length : gallery.length}
-                                </span>
-                            )}
-                        </button>
+                            {group.tabs.map(tab => (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => { setActiveTab(tab.id); setIsSidebarOpen(false); }}
+                                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                                        activeTab === tab.id
+                                            ? 'bg-emerald text-white shadow-sm'
+                                            : 'text-gray-600 hover:text-navy hover:bg-gray-50'
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-2.5">
+                                        <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? 'text-white' : 'text-gray-400'}`} />
+                                        <span>{tab.label}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        {tab.badge && (
+                                            <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow-xs ${
+                                                activeTab === tab.id ? 'bg-white text-orange' : 'bg-orange text-white'
+                                            }`}>
+                                                {tab.badge}
+                                            </span>
+                                        )}
+                                        {(tab.id !== 'quotation' && tab.id !== 'proforma_invoice' && tab.id !== 'invoice' && tab.id !== 'documents') && (
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                                activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
+                                            }`}>
+                                                {tab.id === 'enquiries' ? enquiries.length : tab.id === 'pos_partners' ? posPartners.length : tab.id === 'leads' ? leads.length : tab.id === 'schemes' ? schemes.length : tab.id === 'testimonials' ? testimonials.length : tab.id === 'directors' ? directors.length : gallery.length}
+                                            </span>
+                                        )}
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
                     ))}
                 </nav>
 
@@ -346,7 +379,7 @@ export default function AdminDashboard() {
                         {activeTab === 'directors' && <DirectorsTab directors={directors} onEdit={(d) => setEditModal({ type: 'directors', data: d, isNew: false })} onAdd={() => setEditModal({ type: 'directors', data: { name: '', role: '', description: '', image_url: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('directors', id)} />}
                         {activeTab === 'quotation' && <QuotationTab editData={editQuotationData} onClearEdit={() => setEditQuotationData(null)} />}
                         {activeTab === 'proforma_invoice' && <ProformaInvoiceTab onNavigateToInvoice={() => setActiveTab('invoice')} />}
-                        {activeTab === 'invoice' && <InvoiceTab editData={editInvoiceData} onClearEdit={() => setEditInvoiceData(null)} preselectedQuotation={preselectedQuotation} />}
+                        {activeTab === 'invoice' && <InvoiceTab editData={editInvoiceData} onClearEdit={() => setEditInvoiceData(null)} preselectedQuotation={preselectedQuotation} onOpenProformaList={() => setActiveTab('proforma_invoice')} />}
                         {activeTab === 'documents' && <GeneratedDocumentsTab onEditInvoice={(data) => { setEditInvoiceData(data); setActiveTab('invoice'); }} onEditQuotation={(data) => { setEditQuotationData(data); setActiveTab('quotation'); }} />}
                     </div>
                 </main>
@@ -817,10 +850,56 @@ function QuotationTab({ editData, onClearEdit }) {
 }
 
 // ========== INVOICE TAB ==========
-function InvoiceTab({ editData, onClearEdit, preselectedQuotation }) {
+function InvoiceTab({ editData, onClearEdit, preselectedQuotation, onOpenProformaList }) {
+    const [docMode, setDocMode] = useState('tax'); // 'tax' | 'proforma'
+
     return (
-        <div className="space-y-5">
-            <InvoiceForm editData={editData} onClearEdit={onClearEdit} preselectedQuotation={preselectedQuotation} />
+        <div className="space-y-4">
+            {/* Top Module Sub-Navigation Bar */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setDocMode('tax')}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            docMode === 'tax'
+                                ? 'bg-navy text-white shadow-sm'
+                                : 'bg-gray-100 text-gray-600 hover:text-navy hover:bg-gray-200'
+                        }`}
+                    >
+                        Tax Invoice Generator
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setDocMode('proforma')}
+                        className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            docMode === 'proforma'
+                                ? 'bg-sky-600 text-white shadow-sm'
+                                : 'bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200'
+                        }`}
+                    >
+                        <span>Proforma Invoice Generator</span>
+                        <span className="bg-orange text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow-xs">NEW</span>
+                    </button>
+                </div>
+                {onOpenProformaList && (
+                    <button
+                        type="button"
+                        onClick={onOpenProformaList}
+                        className="text-xs font-semibold text-sky-600 hover:text-sky-800 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                        <span>View All Proforma Invoices & Conversion List →</span>
+                    </button>
+                )}
+            </div>
+
+            <InvoiceForm
+                key={docMode}
+                isProforma={docMode === 'proforma'}
+                editData={editData}
+                onClearEdit={onClearEdit}
+                preselectedQuotation={preselectedQuotation}
+            />
         </div>
     )
 }

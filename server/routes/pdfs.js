@@ -16,13 +16,22 @@ const runPythonCommand = process.platform === 'win32' ? 'python' : 'python3';
 
 const router = express.Router();
 
+const sendPdfResponse = (res, filePath, filename, req) => {
+  const isInline = req.query.inline === 'true';
+  const disposition = isInline ? 'inline' : 'attachment';
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `${disposition}; filename="${filename}"`);
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+  return res.sendFile(filePath);
+};
+
 router.get('/:filename', async (req, res, next) => {
   const { filename } = req.params;
   const filePath = path.join(PDF_DIR, filename);
 
-  // 1. If file exists on disk, serve it immediately
+  // 1. If file exists on disk, serve it immediately with download disposition
   if (fs.existsSync(filePath)) {
-    return res.sendFile(filePath);
+    return sendPdfResponse(res, filePath, filename, req);
   }
 
   // 2. File doesn't exist (likely Render disk wiped). Re-generate it!
@@ -108,7 +117,7 @@ router.get('/:filename', async (req, res, next) => {
       if (q.pdf_data) {
         console.log(`[PDF] Restoring Quotation directly from DB pdf_data: ${filename}`);
         fs.writeFileSync(filePath, Buffer.from(q.pdf_data, 'base64'));
-        return res.sendFile(filePath);
+        return sendPdfResponse(res, filePath, filename, req);
       }
 
       const payload = typeof q.raw_data === 'string' ? JSON.parse(q.raw_data) : q.raw_data;
@@ -122,7 +131,7 @@ router.get('/:filename', async (req, res, next) => {
 
     // Serve the newly generated file
     if (fs.existsSync(filePath)) {
-      return res.sendFile(filePath);
+      return sendPdfResponse(res, filePath, filename, req);
     } else {
       return res.status(500).send('Failed to regenerate PDF');
     }

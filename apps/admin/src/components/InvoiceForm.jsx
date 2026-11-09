@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { API } from '@/lib/legacy-api';
+import { downloadPdfFile } from '@/lib/download';
 
 /* ── Colour tokens matching the REON brand ──────────────────────────────── */
 const C = {
@@ -933,9 +934,13 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
               Create Another
             </button>
             <div style={{ display: 'flex', gap: 10 }}>
-              <a href={successUrl} target="_blank" rel="noreferrer" download style={{ padding: '10px 32px', border: 'none', borderRadius: 8, background: C.green, color: 'white', textDecoration: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'inline-block' }}>
+              <button
+                type="button"
+                onClick={() => downloadPdfFile(successUrl, `${generatedDocNo.replace(/\//g, '_')}.pdf`)}
+                style={{ padding: '10px 32px', border: 'none', borderRadius: 8, background: C.green, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
                 ⬇ Download {isProforma ? 'Proforma' : 'Invoice'} PDF ({generatedDocNo})
-              </a>
+              </button>
             </div>
           </>
         ) : (
