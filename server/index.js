@@ -11,6 +11,9 @@ import dashboardRouter from './routes/dashboard.js';
 import contentRouter from './routes/content.js';
 import adminQuotationsRouter from './routes/admin_quotations.js';
 import adminInvoicesRouter from './routes/admin_invoices.js';
+import adminProformaInvoicesRouter from './routes/admin_proforma_invoices.js';
+import adminPaymentsRouter from './routes/admin_payments.js';
+import adminSignatureRouter from './routes/admin_signature.js';
 import pdfsRouter from './routes/pdfs.js';
 import projectsRouter from './routes/projects.js';
 import posRouter from './src/controllers/posController.js';
@@ -101,6 +104,9 @@ app.use('/api/admin/quotations', authMiddleware, adminQuotationsRouter);
 app.use('/api/quotations', authenticate, adminQuotationsRouter);
 app.use('/api/v2/quotations', authenticate, adminQuotationsRouter);
 app.use('/api/admin/invoices', authMiddleware, adminInvoicesRouter);
+app.use('/api/admin/proforma-invoices', authMiddleware, adminProformaInvoicesRouter);
+app.use('/api/admin/signature', authMiddleware, adminSignatureRouter);
+app.use('/api/admin', authMiddleware, adminPaymentsRouter);
 app.use('/api/projects', authMiddleware, projectsRouter);
 app.use('/api/pos', posRouter);
 app.use('/api/pos/documents', posDocumentsRouter);
@@ -111,6 +117,7 @@ app.use('/api/v2/auth', posAuthRouter);
 
 // Serve generated PDFs with dynamic auto-regeneration if missing
 app.use('/pdfs', pdfsRouter);
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Health check
 app.get('/api/health', (req, res) => {

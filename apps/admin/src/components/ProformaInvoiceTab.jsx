@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { API } from '@/lib/legacy-api';
+import { API, parseJsonSafely } from '@/lib/legacy-api';
 import { downloadPdfFile } from '@/lib/download';
 import {
   FileText, Search, RefreshCw, Plus, FileDown,
@@ -71,7 +71,7 @@ export default function ProformaInvoiceTab({ onNavigateToInvoice }) {
         method: 'POST',
         headers,
       });
-      const data = await res.json();
+      const data = await parseJsonSafely(res);
       if (!res.ok) throw new Error(data.error || 'Failed to generate tax invoice');
 
       setConvertModal(prev => ({

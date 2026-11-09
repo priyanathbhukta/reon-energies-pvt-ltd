@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { API } from '@/lib/legacy-api';
+import { API, parseJsonSafely } from '@/lib/legacy-api';
 import { downloadPdfFile } from '@/lib/download';
 
 /* ── Colour tokens matching the REON brand ──────────────────────────────── */
@@ -195,7 +195,7 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
         if (res.ok) {
-          const data = await res.json();
+          const data = await parseJsonSafely(res);
           if (data?.signature?.signature_image_url) {
             setSignatureUrl(data.signature.signature_image_url);
           }
@@ -479,7 +479,7 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(payload),
       });
-      const data = await response.json();
+      const data = await parseJsonSafely(response);
       if (!response.ok) throw new Error(data.error || `Failed to ${editData ? 'update' : 'generate'} ${isProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'}`);
       if (data.success && data.pdfUrl) {
         setSuccessUrl(data.pdfUrl.startsWith('/pdfs/') ? `${API}${data.pdfUrl}` : data.pdfUrl);
