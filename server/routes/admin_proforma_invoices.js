@@ -87,6 +87,76 @@ export async function getNextProformaInvoiceNumber() {
   return { fy, maxSeq, nextSeqNum, paddedSeq, nextProformaInvoiceNo };
 }
 
+
+// ── State-based GST Calculation Helper ────────────────────────────────────
+export function isWestBengal(stateStr, gstin = '') {
+  if (gstin && String(gstin).trim().startsWith('19')) return true;
+  if (!stateStr) return true;
+  const s = String(stateStr).toLowerCase().replace(/[^a-z0-9]/g, '');
+  return s === 'westbengal' || s === 'wb' || s === 'paschimbanga' || s.startsWith('westbengal');
+}
+
+export function calculateTaxes(customerDetails, itemsRaw = [], charges = {}) {
+  const intraState = isWestBengal(customerDetails?.state, customerDetails?.gstin);
+  let subtotal = 0;
+  let cgstTotal = 0;
+  let sgstTotal = 0;
+  let igstTotal = 0;
+
+  const items = (Array.isArray(itemsRaw) ? itemsRaw : []).map(item => {
+    const qty = parseFloat(item.quantity) || 0;
+    const rate = parseFloat(item.rate) || 0;
+    const taxRate = parseFloat(item.tax) || 0;
+    const taxable = qty * rate;
+    subtotal += taxable;
+
+    let cgstRate = 0, sgstRate = 0, igstRate = 0;
+    let cgstAmt = 0, sgstAmt = 0, igstAmt = 0;
+
+    if (intraState) {
+      cgstRate = taxRate / 2;
+      sgstRate = taxRate / 2;
+      cgstAmt = taxable * (cgstRate / 100);
+      sgstAmt = taxable * (sgstRate / 100);
+      cgstTotal += cgstAmt;
+      sgstTotal += sgstAmt;
+    } else {
+      igstRate = taxRate;
+      igstAmt = taxable * (igstRate / 100);
+      igstTotal += igstAmt;
+    }
+
+    return {
+      ...item,
+      quantity: qty,
+      unit: (item.unit || item.per || 'PCS').toUpperCase(),
+      rate,
+      tax: taxRate,
+      cgstRate,
+      sgstRate,
+      igstRate,
+      cgstAmt,
+      sgstAmt,
+      igstAmt,
+      invoiceValue: taxable,
+    };
+  });
+
+  const loadingCharges = parseFloat(charges?.loadingCharges) || 0;
+  const grandTotal = Math.round(subtotal + cgstTotal + sgstTotal + igstTotal + loadingCharges);
+
+  return {
+    intraState,
+    items,
+    subtotal,
+    cgstTotal,
+    sgstTotal,
+    igstTotal,
+    loadingCharges,
+    grandTotal,
+  };
+}
+
 // ── GET /api/admin/proforma-invoices/next-number ──────────────────────────
 router.get('/next-number', async (req, res) => {
   try {
@@ -162,6 +232,15 @@ router.post('/', async (req, res) => {
       data.invoiceDetails.invoiceNo = proformaInvoiceNo;
     }
   }
+
+  // Server-side State-based GST & Total Calculation
+  const taxInfo = calculateTaxes(data.customerDetails, data.items, data.charges);
+  data.items = taxInfo.items;
+  data.subtotal = taxInfo.subtotal;
+  data.cgstTotal = taxInfo.cgstTotal;
+  data.sgstTotal = taxInfo.sgstTotal;
+  data.igstTotal = taxInfo.igstTotal;
+  data.grandTotal = taxInfo.grandTotal;
 
   // Ensure isProforma flag is set for Python PDF generator
   data.isProforma = true;
@@ -244,9 +323,9 @@ router.post('/', async (req, res) => {
         proforma_invoice_no, quotation_id, quotation_no, lead_id, partner_id,
         pos_name, pos_id, user_id, company_details, customer_details,
         ship_to_details, same_as_bill_to, invoice_details, items, charges,
-        subtotal, cgst_total, sgst_total, grand_total, pdf_url,
+        subtotal, cgst_total, sgst_total, igst_total, grand_total, pdf_url,
         status, valid_until, authorized_signature_url, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,NOW())
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,NOW())
       ON CONFLICT (proforma_invoice_no) DO UPDATE SET
         company_details = EXCLUDED.company_details,
         customer_details = EXCLUDED.customer_details,
@@ -258,6 +337,7 @@ router.post('/', async (req, res) => {
         subtotal = EXCLUDED.subtotal,
         cgst_total = EXCLUDED.cgst_total,
         sgst_total = EXCLUDED.sgst_total,
+        igst_total = EXCLUDED.igst_total,
         grand_total = EXCLUDED.grand_total,
         pdf_url = EXCLUDED.pdf_url,
         valid_until = EXCLUDED.valid_until,
@@ -282,10 +362,11 @@ router.post('/', async (req, res) => {
       JSON.stringify(data.invoiceDetails || {}),
       JSON.stringify(data.items || []),
       JSON.stringify(data.charges || {}),
-      subtotal,
-      cgstTotal,
-      sgstTotal,
-      grandTotal,
+      taxInfo.subtotal,
+      taxInfo.cgstTotal,
+      taxInfo.sgstTotal,
+      taxInfo.igstTotal,
+      taxInfo.grandTotal,
       pdfUrl,
       data.status || 'draft',
       validUntil,
@@ -365,6 +446,7 @@ router.post('/:id/generate-invoice', async (req, res) => {
     invoiceDetails.invoiceDate = new Date().toISOString().split('T')[0];
     invoiceDetails.dueDate = new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0];
 
+    const taxInfo = calculateTaxes(customerDetails, items, charges);
     const pdfData = {
       isProforma: false,
       documentType: 'TAX INVOICE',
@@ -373,12 +455,13 @@ router.post('/:id/generate-invoice', async (req, res) => {
       shipToDetails,
       sameAsBillTo: pi.same_as_bill_to !== false,
       invoiceDetails,
-      items,
+      items: taxInfo.items,
       charges,
-      subtotal: parseFloat(pi.subtotal || 0),
-      cgstTotal: parseFloat(pi.cgst_total || 0),
-      sgstTotal: parseFloat(pi.sgst_total || 0),
-      grandTotal: parseFloat(pi.grand_total || 0),
+      subtotal: taxInfo.subtotal,
+      cgstTotal: taxInfo.cgstTotal,
+      sgstTotal: taxInfo.sgstTotal,
+      igstTotal: taxInfo.igstTotal,
+      grandTotal: taxInfo.grandTotal,
       proformaInvoiceNo: pi.proforma_invoice_no,
       quotationNo: pi.quotation_no,
       authorizedSignatureUrl: pi.authorized_signature_url,
@@ -407,12 +490,12 @@ router.post('/:id/generate-invoice', async (req, res) => {
     const insertInvoiceQuery = `
       INSERT INTO invoices (
         invoice_no, company_details, customer_details, ship_to_details, same_as_bill_to,
-        invoice_details, items, subtotal, cgst_total, sgst_total, grand_total, pdf_url,
+        invoice_details, items, subtotal, cgst_total, sgst_total, igst_total, grand_total, pdf_url,
         source_proforma_invoice_id, proforma_invoice_no, quotation_id, quotation_no,
         lead_id, partner_id, pos_name, pos_id, user_id,
         payment_status, total_received, outstanding_amount, authorized_signature_url,
         created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,NOW(),NOW())
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,NOW(),NOW())
       RETURNING *;
     `;
 
@@ -424,10 +507,11 @@ router.post('/:id/generate-invoice', async (req, res) => {
       pi.same_as_bill_to !== false,
       JSON.stringify(invoiceDetails),
       JSON.stringify(items),
-      pi.subtotal,
-      pi.cgst_total,
-      pi.sgst_total,
-      grandTotal,
+      taxInfo.subtotal,
+      taxInfo.cgstTotal,
+      taxInfo.sgstTotal,
+      taxInfo.igstTotal,
+      taxInfo.grandTotal,
       pdfUrl,
       pi.id,
       pi.proforma_invoice_no,

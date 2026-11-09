@@ -1,7 +1,25 @@
 #!/usr/bin/env python3
+"""
+REON ENERGIES PVT LTD - Proforma Invoice & Tax Invoice PDF Generator
+Generates high-precision, standard accounting A4 invoices with:
+- Top-left official REON logo
+- 8-column items table: Sl. No., Description, HSN / SSN, Qty, Per, Rate, GST, Invoice Value
+- Centered table headers (horizontal & vertical)
+- Bill To / Ship To without "Same as Bill To" text in PDF
+- Strict INR currency formatting (₹1,000.00, ₹100,000.00, ₹1,000,000.00)
+- State-based automatic GST logic:
+    * West Bengal: CGST = Rate/2, SGST = Rate/2, IGST = 0%
+    * Other States (Assam, Bihar, etc.): IGST = Rate, CGST = 0%, SGST = 0%
+- Dynamic GST Summary Table & Financial Summary
+- Zero POS name / operator information in customer-facing PDF
+- Bank details with QR_REON & UPI ID: 8436649991m@pnb
+- System-generated bill signed attached caption & Authorized Signatory
+"""
+
 import json
 import os
 import sys
+import re
 import argparse
 from datetime import datetime
 
@@ -14,11 +32,46 @@ try:
         Image as RLImage, KeepTogether
     )
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT, TA_JUSTIFY
     from reportlab.pdfgen import canvas
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
 except ImportError:
     print("Error: Missing reportlab. Run: pip install reportlab", file=sys.stderr)
     sys.exit(1)
+
+_FONT_CHOICES = [
+    # 1. Linux / Render system fonts (dejavu, freesans, liberation)
+    ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+    ("/usr/share/fonts/truetype/freefont/FreeSans.ttf", "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf"),
+    ("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
+    # 2. Windows system fonts (Arial, Segoe UI)
+    ("C:\\Windows\\Fonts\\arial.ttf", "C:\\Windows\\Fonts\\arialbd.ttf"),
+    ("C:\\Windows\\Fonts\\segoeui.ttf", "C:\\Windows\\Fonts\\segoeuib.ttf"),
+    # 3. Mac fonts
+    ("/System/Library/Fonts/Supplemental/Arial.ttf", "/System/Library/Fonts/Supplemental/Arial Bold.ttf"),
+    ("/Library/Fonts/Arial.ttf", "/Library/Fonts/Arial Bold.ttf")
+]
+
+FN_REG = "Helvetica"
+FN_BOLD = "Helvetica-Bold"
+
+def _register_fonts():
+    global FN_REG, FN_BOLD
+    for r_path, b_path in _FONT_CHOICES:
+        if os.path.exists(r_path) and os.path.exists(b_path):
+            try:
+                pdfmetrics.registerFont(TTFont("ReonFont", r_path))
+                pdfmetrics.registerFont(TTFont("ReonFont-Bold", b_path))
+                pdfmetrics.registerFontFamily("ReonFont", normal="ReonFont", bold="ReonFont-Bold")
+                FN_REG = "ReonFont"
+                FN_BOLD = "ReonFont-Bold"
+                return True
+            except Exception:
+                continue
+    return False
+
+_register_fonts()
 
 def num_to_words(n):
     if n == 0: return "Zero"
@@ -54,60 +107,73 @@ def num_to_words(n):
     if n > 0:
         words.append(get_words(n))
         
-    return " ".join(words) + " Rupees Only"
+    return "INR " + " ".join(words) + " Rupees Only"
 
-def format_inr(v):
+def format_inr(v, symbol=True):
     """
     Format numeric value using standard comma grouping with exact 2 decimal places:
-    1,000.00
-    10,000.00
-    100,000.00
-    1,000,000.00
-    10,000,000.00
+    ₹1,000.00
+    ₹10,000.00
+    ₹100,000.00
+    ₹1,000,000.00
+    ₹10,000,000.00
     """
     try:
         val = float(v or 0)
     except (ValueError, TypeError):
-        return "0.00"
-    return f"{val:,.2f}"
+        val = 0.0
+    s = f"{val:,.2f}"
+    return f"₹{s}" if symbol else s
+
+def is_west_bengal(state_str, gstin=""):
+    """
+    Determine if customer's Bill To state is West Bengal.
+    State code 19 in GSTIN indicates West Bengal.
+    Normalized string comparison against West Bengal, WB, etc.
+    """
+    if gstin and str(gstin).strip().startswith("19"):
+        return True
+    if not state_str:
+        return True # Default to West Bengal if not provided
+    s = "".join(c for c in str(state_str).lower() if c.isalnum())
+    return s in ["westbengal", "wb", "paschimbanga", "westbengal712409"]
+
+def sanitize_customer_text(text):
+    """
+    Remove any POS references or internal notes from customer-facing text.
+    """
+    if not text:
+        return ""
+    # Strip (POS: ...) or (Direct) or POS employee information
+    cleaned = re.sub(r'\s*\((?:POS|pos)[^)]*\)', '', str(text))
+    cleaned = re.sub(r'\s*\(Direct\)', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\bPOS\s*Partner:?[^\n,]*', '', cleaned, flags=re.IGNORECASE)
+    return cleaned.strip()
 
 class InvoicePDFTemplate(SimpleDocTemplate):
     def __init__(self, filename, **kw):
-        super().__init__(filename, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=110, bottomMargin=40, **kw)
-        
-def draw_watermark_and_header(canvas_obj, doc):
+        super().__init__(
+            filename,
+            pagesize=A4,
+            rightMargin=30,
+            leftMargin=30,
+            topMargin=30,
+            bottomMargin=35,
+            **kw
+        )
+
+def draw_watermark(canvas_obj, doc):
     canvas_obj.saveState()
-    
-    # Draw Watermark
-    canvas_obj.setFont("Helvetica-Bold", 38)
-    canvas_obj.setFillColor(colors.lightgrey, alpha=0.18)
+    canvas_obj.setFont(FN_BOLD, 36)
+    canvas_obj.setFillColor(colors.lightgrey, alpha=0.12)
     canvas_obj.translate(A4[0]/2, A4[1]/2)
     canvas_obj.rotate(45)
     canvas_obj.drawCentredString(0, 0, "REON ENERGIES PRIVATE LIMITED")
     canvas_obj.rotate(-45)
     canvas_obj.translate(-A4[0]/2, -A4[1]/2)
-    canvas_obj.setFillColor(colors.black, alpha=1.0)
-
-    # Top Left Logo & Company Name
-    logo_path = os.path.join(os.path.dirname(__file__), '..', '..', 'public', 'logo_latest.png')
-    if not os.path.exists(logo_path):
-        logo_path = os.path.join(os.path.dirname(__file__), '..', '..', 'public', 'admin-logo.jpg')
-    if not os.path.exists(logo_path):
-        logo_path = os.path.join(os.path.dirname(__file__), '..', 'public', 'logo_latest.png')
-        
-    if os.path.exists(logo_path):
-        canvas_obj.drawImage(logo_path, 30, A4[1] - 90, width=110, height=70, preserveAspectRatio=True, mask='auto', anchor='sw')
-        canvas_obj.setFont("Helvetica-Bold", 20)
-        canvas_obj.setFillColor(colors.HexColor("#1B2D5B")) # REON Navy
-        canvas_obj.drawString(150, A4[1] - 55, "REON ENERGIES PRIVATE LIMITED")
-
     canvas_obj.restoreState()
 
 def get_signature_image(data):
-    """
-    Search for authorized signature image file on disk.
-    Supports authorizedSignaturePath, local upload URLs, or default active signature.
-    """
     sig_path = data.get('authorizedSignaturePath')
     if not sig_path and data.get('authorizedSignatureUrl'):
         url = str(data.get('authorizedSignatureUrl'))
@@ -125,28 +191,61 @@ def get_signature_image(data):
 
     if sig_path and os.path.exists(sig_path):
         try:
-            return RLImage(sig_path, width=105, height=42, preserveAspectRatio=True)
+            return RLImage(sig_path, width=110, height=45, preserveAspectRatio=True)
         except Exception as e:
             print(f"Warning: Could not load signature image: {e}", file=sys.stderr)
+    return None
+
+def get_logo_image():
+    """
+    Search for official REON logo asset.
+    """
+    candidates = [
+        os.path.join(os.path.dirname(__file__), 'reon_logo.png'),
+        os.path.join(os.path.dirname(__file__), 'REON_ENERGIES.png'),
+        os.path.join(os.path.dirname(__file__), '..', '..', 'apps', 'web', 'public', 'logo_latest.png'),
+        os.path.join(os.path.dirname(__file__), '..', '..', 'apps', 'web', 'public', 'logo_final_cropped.png'),
+        os.path.join(os.path.dirname(__file__), '..', '..', 'apps', 'admin', 'public', 'reon_logo.png'),
+    ]
+    for p in candidates:
+        if os.path.exists(p):
+            try:
+                # 447 x 209 aspect ratio -> width=105, height=49.1
+                return RLImage(p, width=105, height=49, preserveAspectRatio=True)
+            except Exception as e:
+                print(f"Warning: Failed to load logo {p}: {e}", file=sys.stderr)
     return None
 
 def generate_pdf(output_path, data):
     styles = getSampleStyleSheet()
     
-    styleN = styles["Normal"]
-    styleN.fontSize = 8.5
-    styleN.leading = 11.5
+    styleN = ParagraphStyle('DocNormal', parent=styles['Normal'], fontName=FN_REG, fontSize=8.5, leading=11.5, textColor=colors.HexColor("#1A1A2E"))
+    styleBold = ParagraphStyle('DocBold', parent=styleN, fontName=FN_BOLD)
+    styleRight = ParagraphStyle('DocRight', parent=styleN, alignment=TA_RIGHT)
+    styleCenter = ParagraphStyle('DocCenter', parent=styleN, alignment=TA_CENTER)
     
-    styleH = styles["Heading1"]
-    styleH.alignment = TA_CENTER
-    styleH.textColor = colors.HexColor("#1B2D5B") # REON Navy
-    styleH.fontSize = 17
-    styleH.fontName = 'Helvetica-Bold'
+    # Header styles
+    styleDocTitle = ParagraphStyle(
+        'DocTitle',
+        parent=styleN,
+        fontName=FN_BOLD,
+        fontSize=18,
+        leading=22,
+        alignment=TA_RIGHT,
+        textColor=colors.HexColor("#1B2D5B")
+    )
     
-    styleBold = ParagraphStyle('Bold', parent=styleN, fontName='Helvetica-Bold')
-    styleRight = ParagraphStyle('Right', parent=styleN, alignment=TA_RIGHT)
-    styleCenter = ParagraphStyle('Center', parent=styleN, alignment=TA_CENTER)
-    
+    # Table Column Header Style - Vertically & Horizontally Centered
+    styleTblHeader = ParagraphStyle(
+        'TblHeader',
+        parent=styleN,
+        fontName=FN_BOLD,
+        fontSize=8,
+        leading=10,
+        alignment=TA_CENTER,
+        textColor=colors.white
+    )
+
     doc = InvoicePDFTemplate(output_path)
     story = []
     
@@ -157,10 +256,6 @@ def generate_pdf(output_path, data):
     )
     doc_title = "PROFORMA INVOICE" if is_proforma else "TAX INVOICE"
     
-    # Header Title
-    story.append(Paragraph(doc_title, styleH))
-    story.append(Spacer(1, 10))
-    
     c_details = data.get('companyDetails', {})
     cust_details = data.get('customerDetails', {})
     ship_details = data.get('shipToDetails') or {}
@@ -170,7 +265,12 @@ def generate_pdf(output_path, data):
 
     i_details = data.get('invoiceDetails', {})
     
-    # Document reference rows
+    # Resolve Bill To State for GST Calculation (Ignore Ship To)
+    bill_to_state = cust_details.get('state', 'West Bengal')
+    bill_to_gstin = cust_details.get('gstin', '')
+    intra_state = is_west_bengal(bill_to_state, bill_to_gstin)
+
+    # Document reference values
     invoice_no = i_details.get('proformaInvoiceNo') if is_proforma else i_details.get('invoiceNo', '')
     if not invoice_no:
         invoice_no = i_details.get('invoiceNo', '')
@@ -185,6 +285,31 @@ def generate_pdf(output_path, data):
     proforma_ref = data.get('proformaInvoiceNo') or data.get('proforma_invoice_no') or ''
     eway_bill = i_details.get('ewayBillNumber', '')
 
+    # ── 1. Top Header Block: Logo, Company & Document Meta ──────────────────
+    logo_img = get_logo_image()
+    company_info_html = (
+        f"<b><font size=10 color='#1B2D5B'>REON ENERGIES PRIVATE LIMITED</font></b><br/>"
+        f"<font size=7.5 color='#374151'>"
+        f"Singherbheri, Singur, Hooghly, West Bengal, 712409<br/>"
+        f"<b>Contact:</b> 8436649991 | <b>Email:</b> info@reonenergy.in<br/>"
+        f"<b>Website:</b> www.reonenergy.in<br/>"
+        f"<b>GSTIN:</b> {c_details.get('gstin', '19AAPCR6346E2ZX')}"
+        f"</font>"
+    )
+
+    if logo_img:
+        company_cell_table = Table(
+            [[logo_img, Paragraph(company_info_html, styleN)]],
+            colWidths=[110, 165]
+        )
+        company_cell_table.setStyle(TableStyle([
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('PADDING', (0,0), (-1,-1), 0),
+        ]))
+        company_left_block = company_cell_table
+    else:
+        company_left_block = Paragraph(company_info_html, styleN)
+
     right_info_lines = [
         f"<b>{doc_title} No:</b> {invoice_no}",
         f"<b>{date_label}:</b> {date_val}",
@@ -198,7 +323,24 @@ def generate_pdf(output_path, data):
     if eway_bill:
         right_info_lines.append(f"<b>E-way Bill:</b> {eway_bill}")
 
-    # Build Ship To Address Text
+    right_meta_block = [
+        Paragraph(doc_title, styleDocTitle),
+        Spacer(1, 4),
+        Paragraph("<br/>".join(right_info_lines), styleRight)
+    ]
+
+    top_row_table = Table(
+        [[company_left_block, right_meta_block]],
+        colWidths=[280, 255]
+    )
+    top_row_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('PADDING', (0,0), (-1,-1), 0),
+    ]))
+    story.append(top_row_table)
+    story.append(Spacer(1, 10))
+
+    # ── 2. BILL TO | SHIP TO (Without 'Same as Bill To' text) ────────────────
     ship_name = ship_details.get('companyName') or ship_details.get('name', '') or cust_details.get('name', '')
     recipient = ship_details.get('recipientName', '')
     ship_lines = [f"<b>{ship_name}</b>"]
@@ -212,25 +354,18 @@ def generate_pdf(output_path, data):
         ship_lines.append(f"<b>Email:</b> {ship_details.get('email')}")
     if ship_details.get('gstin'):
         ship_lines.append(f"<b>GSTIN:</b> {ship_details.get('gstin')}")
-    state_str = ship_details.get('state', '')
+    ship_state_str = ship_details.get('state', '')
     if ship_details.get('pincode'):
-        state_str = f"{state_str} - {ship_details.get('pincode')}" if state_str else ship_details.get('pincode')
-    if state_str:
-        ship_lines.append(f"<b>State:</b> {state_str}")
+        ship_state_str = f"{ship_state_str} - {ship_details.get('pincode')}" if ship_state_str else ship_details.get('pincode')
+    if ship_state_str:
+        ship_lines.append(f"<b>State:</b> {ship_state_str}")
 
     cust_gstin_line = f"<b>GSTIN:</b> {cust_details.get('gstin')}<br/>" if cust_details.get('gstin') else ""
 
-    header_data = [
+    address_table_data = [
         [
-            Paragraph(f"<b>REON ENERGIES PRIVATE LIMITED</b><br/>"
-                      f"Address : Singherbheri, Singur, Hooghly, West Bengal, 712409<br/>"
-                      f"<b>Contact:</b> 8436649991 | <b>Email:</b> info@reonenergy.in<br/>"
-                      f"<b>Website:</b> www.reonenergy.in | <b>GSTIN:</b> {c_details.get('gstin', '19AAPCR6346E2ZX')}", styleN),
-            Paragraph("<br/>".join(right_info_lines), styleN)
-        ],
-        [
-            Paragraph("<b>Bill To:</b>", styleBold),
-            Paragraph("<b>Ship To:</b>" + (" <font size=7 color='#6B7280'>(Same as Bill To)</font>" if same_as_bill_to else ""), styleBold)
+            Paragraph("<b>BILL TO:</b>", styleBold),
+            Paragraph("<b>SHIP TO:</b>", styleBold)
         ],
         [
             Paragraph(f"<b>{cust_details.get('name', '')}</b><br/>"
@@ -242,90 +377,149 @@ def generate_pdf(output_path, data):
             Paragraph("<br/>".join(ship_lines), styleN)
         ]
     ]
-    
-    t_header = Table(header_data, colWidths=[doc.width/2.0]*2)
-    t_header.setStyle(TableStyle([
+    t_address = Table(address_table_data, colWidths=[267.5, 267.5])
+    t_address.setStyle(TableStyle([
         ('BOX', (0,0), (-1,-1), 1, colors.HexColor("#1B2D5B")),
         ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#D1D5DB")),
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('PADDING', (0,0), (-1,-1), 5.5),
-        ('BACKGROUND', (0,1), (-1,1), colors.HexColor("#F3F4F6")),
+        ('PADDING', (0,0), (-1,-1), 5),
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#F3F4F6")),
     ]))
-    story.append(t_header)
-    story.append(Spacer(1, 12))
+    story.append(t_address)
+    story.append(Spacer(1, 10))
+
+    # ── 3. Product / Service Table (8 Columns with Centered Headers) ─────────
+    # Columns: Sl. No., Description, HSN / SSN, Qty, Per, Rate, GST, Invoice Value
+    # Col Widths sum = 30 + 175 + 60 + 32 + 38 + 65 + 45 + 90 = 535 pt
+    col_widths = [30, 175, 60, 32, 38, 65, 45, 90]
     
-    # ── Items Table ──────────────────────────────────────────
-    items = data.get('items', [])
-    items_table_data = [
-        ["S.No", "Description of Goods / Services", "HSN", "Qty", "Rate (₹)", "Tax %", "CGST (₹)", "SGST (₹)", "Amount (₹)"]
+    header_row = [
+        Paragraph("Sl. No.", styleTblHeader),
+        Paragraph("Description", styleTblHeader),
+        Paragraph("HSN / SSN", styleTblHeader),
+        Paragraph("Qty", styleTblHeader),
+        Paragraph("Per", styleTblHeader),
+        Paragraph("Rate", styleTblHeader),
+        Paragraph("GST", styleTblHeader),
+        Paragraph("Invoice Value", styleTblHeader),
     ]
-    
+    items_table_data = [header_row]
+
+    items = data.get('items', [])
+    tot_taxable = 0.0
+    tot_cgst = 0.0
+    tot_sgst = 0.0
+    tot_igst = 0.0
+
+    # Rate-wise GST aggregation dictionary
+    # rate_pct -> { taxable, cgst, sgst, igst }
+    gst_rate_summary = {}
+
     for idx, item in enumerate(items):
         item_qty = float(item.get('quantity', 0))
         item_rate = float(item.get('rate', 0))
-        item_total = item_qty * item_rate
+        item_taxable = item_qty * item_rate
+        tot_taxable += item_taxable
+
         tax_pct = float(item.get('tax', 0))
-        cgst_amt = item_total * (tax_pct/2 / 100)
-        sgst_amt = item_total * (tax_pct/2 / 100)
-        final_amt = item_total + cgst_amt + sgst_amt
-        
-        desc_text = f"<b>{item.get('name', '')}</b>"
-        if item.get('description'):
-            desc_text += f"<br/><font size=7.5 color='#4B5563'>{item.get('description')}</font>"
+        unit_str = str(item.get('unit') or item.get('per') or 'PCS').strip().upper()
+        if unit_str == 'MTR2':
+            unit_str = 'MTR²'
+
+        # State-based GST calculation
+        if intra_state:
+            # West Bengal -> CGST + SGST (half and half), IGST = 0
+            cgst_rate = tax_pct / 2.0
+            sgst_rate = tax_pct / 2.0
+            igst_rate = 0.0
+            cgst_amt = item_taxable * (cgst_rate / 100.0)
+            sgst_amt = item_taxable * (sgst_rate / 100.0)
+            igst_amt = 0.0
+        else:
+            # Other state -> IGST = full tax_pct, CGST = 0, SGST = 0
+            cgst_rate = 0.0
+            sgst_rate = 0.0
+            igst_rate = tax_pct
+            cgst_amt = 0.0
+            sgst_amt = 0.0
+            igst_amt = item_taxable * (igst_rate / 100.0)
+
+        tot_cgst += cgst_amt
+        tot_sgst += sgst_amt
+        tot_igst += igst_amt
+
+        # Group for GST Summary
+        if tax_pct not in gst_rate_summary:
+            gst_rate_summary[tax_pct] = {'taxable': 0.0, 'cgst': 0.0, 'sgst': 0.0, 'igst': 0.0}
+        gst_rate_summary[tax_pct]['taxable'] += item_taxable
+        gst_rate_summary[tax_pct]['cgst'] += cgst_amt
+        gst_rate_summary[tax_pct]['sgst'] += sgst_amt
+        gst_rate_summary[tax_pct]['igst'] += igst_amt
+
+        # Item-wise Invoice Value = item_taxable (as per standard Indian invoice item value)
+        item_invoice_value = item_taxable
+
+        # Sanitize item description to remove any POS operator text
+        raw_name = sanitize_customer_text(item.get('name', ''))
+        raw_desc = sanitize_customer_text(item.get('description', ''))
+        desc_text = f"<b>{raw_name}</b>"
+        if raw_desc:
+            desc_text += f"<br/><font size=7 color='#4B5563'>{raw_desc}</font>"
+
         desc_p = Paragraph(desc_text, styleN)
-        hsn_p = Paragraph(str(item.get('hsn', '')), styleCenter)
-        
+        hsn_p = Paragraph(str(item.get('hsn', '') or '-'), styleCenter)
+
         items_table_data.append([
-            str(idx+1),
+            str(idx + 1),
             desc_p,
             hsn_p,
-            f"{item_qty:g} {item.get('unit', 'Nos')}".strip(),
+            f"{item_qty:g}",
+            unit_str,
             format_inr(item_rate),
             f"{tax_pct:g}%",
-            format_inr(cgst_amt),
-            format_inr(sgst_amt),
-            format_inr(final_amt)
+            format_inr(item_invoice_value)
         ])
-    
-    # Loading & Forwarding Charges if any
+
+    # Loading / Forwarding charges if any
     loading_charge = float(data.get('charges', {}).get('loadingCharges', 0))
     if loading_charge > 0:
         items_table_data.append([
             "",
             Paragraph("<b>Loading & Forwarding Charges</b>", styleN),
-            "", "", "", "", "", "",
+            "", "", "", "", "",
             format_inr(loading_charge)
         ])
-    
-    # Totals Row
-    cgstTotal = float(data.get('cgstTotal', 0))
-    sgstTotal = float(data.get('sgstTotal', 0))
-    grandTotal = float(data.get('grandTotal', 0))
-    
+
+    # Subtotal Row in Product Table
+    subtotal_with_loading = tot_taxable + loading_charge
     items_table_data.append([
         "",
-        Paragraph("<b>Total Grand Amount</b>", styleBold),
-        "", "", "", "",
-        format_inr(cgstTotal),
-        format_inr(sgstTotal),
-        format_inr(grandTotal)
+        Paragraph("<b>Total Taxable Value</b>", styleBold),
+        "", "", "", "", "",
+        format_inr(subtotal_with_loading)
     ])
-    
-    # Col widths sum = 25+145+60+35+55+35+55+55+70 = 535 pt (Exactly matching doc.width A4 margins)
-    t_items = Table(items_table_data, colWidths=[25, 145, 60, 35, 55, 35, 55, 55, 70], repeatRows=1)
+
+    t_items = Table(items_table_data, colWidths=col_widths, repeatRows=1)
     t_items.setStyle(TableStyle([
-        ('BOX', (0,0), (-1,-1), 1.2, colors.HexColor("#1B2D5B")), # Complete outer rectangular border
+        ('BOX', (0,0), (-1,-1), 1.2, colors.HexColor("#1B2D5B")),
         ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#D1D5DB")),
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1B2D5B")), # Professional REON Navy header
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1B2D5B")),
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
         ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
         ('FONTSIZE', (0,0), (-1,0), 8),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        # Alignment requirements:
+        # Description: Left aligned
+        # HSN/SSN, Qty, Per, GST: Center aligned
+        # Rate, Invoice Value: Right aligned
         ('ALIGN', (0,1), (0,-1), 'CENTER'),
+        ('ALIGN', (1,1), (1,-1), 'LEFT'),
+        ('ALIGN', (2,1), (2,-1), 'CENTER'),
         ('ALIGN', (3,1), (3,-1), 'CENTER'),
-        ('ALIGN', (5,1), (5,-1), 'CENTER'),
-        ('ALIGN', (4,1), (4,-1), 'RIGHT'),
-        ('ALIGN', (6,1), (8,-1), 'RIGHT'),
+        ('ALIGN', (4,1), (4,-1), 'CENTER'),
+        ('ALIGN', (5,1), (5,-1), 'RIGHT'),
+        ('ALIGN', (6,1), (6,-1), 'CENTER'),
+        ('ALIGN', (7,1), (7,-1), 'RIGHT'),
         ('PADDING', (0,0), (-1,-1), 4.5),
         ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor("#F3F4F6")),
         ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
@@ -334,83 +528,115 @@ def generate_pdf(output_path, data):
     story.append(t_items)
     story.append(Spacer(1, 10))
 
-    # ── HSN / SAC Summary Table ──────────────────────────────
-    hsn_summary = {}
-    for item in items:
-        hsn = str(item.get('hsn', ''))
-        if not hsn: continue
-        tax_pct = float(item.get('tax', 0))
-        taxable = float(item.get('quantity', 0)) * float(item.get('rate', 0))
-        key = f"{hsn}_{tax_pct}"
-        if key not in hsn_summary:
-            hsn_summary[key] = {'hsn': hsn, 'taxable': 0, 'tax_pct': tax_pct}
-        hsn_summary[key]['taxable'] += taxable
-
-    if hsn_summary:
-        hsn_table_data = [
-            ["HSN/SAC", "Taxable Value (₹)", "CGST", "", "SGST/UTGST", "", "Total Tax (₹)"],
-            ["", "", "Rate", "Amount (₹)", "Rate", "Amount (₹)", ""]
+    # ── 4. GST Summary Table & Financial Summary Block (Side by Side) ───────
+    # GST Summary Table (Required structure):
+    # | GST Component | Rate | Amount |
+    gst_summary_data = [
+        [
+            Paragraph("<b>GST Component</b>", styleBold),
+            Paragraph("<b>Rate</b>", ParagraphStyle('H1', parent=styleBold, alignment=TA_CENTER)),
+            Paragraph("<b>Amount</b>", ParagraphStyle('H2', parent=styleBold, alignment=TA_RIGHT)),
         ]
-        
-        tot_taxable = 0
-        tot_cgst = 0
-        tot_sgst = 0
-        
-        for k, hdata in hsn_summary.items():
-            taxable = hdata['taxable']
-            tax_pct = hdata['tax_pct']
-            cgst_amt = taxable * (tax_pct/2 / 100)
-            sgst_amt = taxable * (tax_pct/2 / 100)
-            total_tax_amt = cgst_amt + sgst_amt
-            
-            hsn_table_data.append([
-                hdata['hsn'],
-                format_inr(taxable),
-                f"{tax_pct/2:g}%" if tax_pct > 0 else "0%",
-                format_inr(cgst_amt),
-                f"{tax_pct/2:g}%" if tax_pct > 0 else "0%",
-                format_inr(sgst_amt),
-                format_inr(total_tax_amt)
-            ])
-            tot_taxable += taxable
-            tot_cgst += cgst_amt
-            tot_sgst += sgst_amt
-            
-        hsn_table_data.append([
-            Paragraph("<b>Total</b>", ParagraphStyle('R', parent=styleN, alignment=TA_RIGHT)),
-            format_inr(tot_taxable),
-            "",
-            format_inr(tot_cgst),
-            "",
-            format_inr(tot_sgst),
-            format_inr(tot_cgst + tot_sgst)
-        ])
-        
-        t_hsn = Table(hsn_table_data, colWidths=[90, 85, 45, 75, 55, 75, 110])
-        t_hsn.setStyle(TableStyle([
-            ('BOX', (0,0), (-1,-1), 1, colors.HexColor("#1B2D5B")),
-            ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#D1D5DB")),
-            ('ALIGN', (1,0), (-1,-1), 'RIGHT'),
-            ('ALIGN', (0,0), (0,-1), 'CENTER'),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('SPAN', (0,0), (0,1)),
-            ('SPAN', (1,0), (1,1)),
-            ('SPAN', (2,0), (3,0)),
-            ('SPAN', (4,0), (5,0)),
-            ('SPAN', (6,0), (6,1)),
-            ('BACKGROUND', (0,0), (-1,1), colors.HexColor("#F3F4F6")),
-            ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
-            ('PADDING', (0,0), (-1,-1), 4),
-        ]))
-        story.append(t_hsn)
-        story.append(Spacer(1, 10))
-    
+    ]
+
+    sorted_rates = sorted(gst_rate_summary.keys())
+    if not sorted_rates:
+        sorted_rates = [18.0]
+
+    if intra_state:
+        # West Bengal: IGST is 0%, CGST and SGST show calculated amounts
+        gst_summary_data.append(["IGST", "0%", format_inr(0)])
+        for r in sorted_rates:
+            c_amt = gst_rate_summary.get(r, {}).get('cgst', 0.0)
+            s_amt = gst_rate_summary.get(r, {}).get('sgst', 0.0)
+            gst_summary_data.append([f"CGST ({r/2:g}%)", f"{r/2:g}%", format_inr(c_amt)])
+            gst_summary_data.append([f"SGST ({r/2:g}%)", f"{r/2:g}%", format_inr(s_amt)])
+    else:
+        # Another State: IGST shows calculated amounts, CGST and SGST are 0%
+        for r in sorted_rates:
+            i_amt = gst_rate_summary.get(r, {}).get('igst', 0.0)
+            gst_summary_data.append([f"IGST ({r:g}%)", f"{r:g}%", format_inr(i_amt)])
+        gst_summary_data.append(["CGST", "0%", format_inr(0)])
+        gst_summary_data.append(["SGST", "0%", format_inr(0)])
+
+    total_tax_amt = tot_cgst + tot_sgst + tot_igst
+    gst_summary_data.append([
+        Paragraph("<b>Total Tax</b>", styleBold),
+        "",
+        format_inr(total_tax_amt)
+    ])
+
+    t_gst_summary = Table(gst_summary_data, colWidths=[115, 65, 95])
+    t_gst_summary.setStyle(TableStyle([
+        ('BOX', (0,0), (-1,-1), 1, colors.HexColor("#1B2D5B")),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#D1D5DB")),
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#F3F4F6")),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('ALIGN', (0,1), (0,-1), 'LEFT'),
+        ('ALIGN', (1,1), (1,-1), 'CENTER'),
+        ('ALIGN', (2,1), (2,-1), 'RIGHT'),
+        ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor("#EBF9FB")),
+        ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+        ('PADDING', (0,0), (-1,-1), 4),
+    ]))
+
+    # Financial Summary Table
+    grand_total = round(tot_taxable + total_tax_amt + loading_charge)
+    fin_summary_data = [
+        ["Subtotal", format_inr(tot_taxable)],
+        ["Discount", format_inr(0)],
+        ["Taxable Value", format_inr(tot_taxable)],
+    ]
+    if intra_state:
+        fin_summary_data.append(["CGST", format_inr(tot_cgst)])
+        fin_summary_data.append(["SGST", format_inr(tot_sgst)])
+        fin_summary_data.append(["IGST (0%)", format_inr(0)])
+    else:
+        fin_summary_data.append(["IGST", format_inr(tot_igst)])
+        fin_summary_data.append(["CGST (0%)", format_inr(0)])
+        fin_summary_data.append(["SGST (0%)", format_inr(0)])
+
+    if loading_charge > 0:
+        fin_summary_data.append(["Loading / Forwarding", format_inr(loading_charge)])
+
+    fin_summary_data.append([
+        Paragraph("<b>Grand Total</b>", ParagraphStyle('GT', parent=styleBold, fontSize=9.5, textColor=colors.HexColor("#1B2D5B"))),
+        Paragraph(f"<b>{format_inr(grand_total)}</b>", ParagraphStyle('GTR', parent=styleBold, fontSize=9.5, alignment=TA_RIGHT, textColor=colors.HexColor("#1B2D5B")))
+    ])
+
+    t_fin_summary = Table(fin_summary_data, colWidths=[130, 110])
+    t_fin_summary.setStyle(TableStyle([
+        ('BOX', (0,0), (-1,-1), 1, colors.HexColor("#1B2D5B")),
+        ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#D1D5DB")),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('ALIGN', (0,0), (0,-1), 'LEFT'),
+        ('ALIGN', (1,0), (1,-1), 'RIGHT'),
+        ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor("#FEF3C7")),
+        ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+        ('PADDING', (0,0), (-1,-1), 4),
+    ]))
+
+    # Place GST Summary and Financial Summary side by side
+    combined_summary_table = Table(
+        [[
+            Table([[Paragraph("<b>GST SUMMARY</b>", styleBold)], [t_gst_summary]], colWidths=[275]),
+            Table([[Paragraph("<b>FINANCIAL SUMMARY</b>", styleBold)], [t_fin_summary]], colWidths=[250])
+        ]],
+        colWidths=[280, 255]
+    )
+    combined_summary_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('PADDING', (0,0), (-1,-1), 0),
+    ]))
+    story.append(combined_summary_table)
+    story.append(Spacer(1, 10))
+
     # Amount in words
-    amount_words = num_to_words(grandTotal)
+    amount_words = num_to_words(grand_total)
     story.append(Paragraph(f"<b>Amount in Words:</b> {amount_words}", styleN))
-    story.append(Spacer(1, 14))
-    
-    # ── Bank Details, QR & Signatory Section ───────────────────
+    story.append(Spacer(1, 12))
+
+    # ── 5. Bank Details, QR & Signatory Section ─────────────────────────────
     qr_img = None
     qr_candidate = os.path.join(os.path.dirname(__file__), 'qr_reon.png')
     if os.path.exists(qr_candidate):
@@ -452,24 +678,26 @@ def generate_pdf(output_path, data):
         sig_cell_elements.append(sig_img)
         sig_cell_elements.append(Spacer(1, 2))
     else:
-        sig_cell_elements.append(Spacer(1, 32))
+        sig_cell_elements.append(Spacer(1, 30))
 
-    # Exact required caption underneath signature
+    # Required caption and signatory label
     sig_cell_elements.append(Paragraph("<font size=7 color='#4B5563'>System-generated bill signed attached</font>", styleRight))
     sig_cell_elements.append(Paragraph("<b>Authorised Signatory</b>", styleRight))
 
     bank_data = [
         [
             bank_box,
-            Paragraph("<b>Declaration:</b><br/>We declare that this invoice shows the actual price of the "
-                      "goods described and that all particulars are true and correct.", styleN)
+            Paragraph("<b>Terms & Conditions:</b><br/>"
+                      "1. Payment is due as per agreed milestone terms.<br/>"
+                      "2. Goods once sold will be serviced as per standard warranty terms.<br/>"
+                      "3. Subject to Singur, Hooghly jurisdiction.", styleN)
         ],
         [
             Paragraph("<br/><br/><b>Customer's Seal and Signature</b>", styleN),
             sig_cell_elements
         ]
     ]
-    t_bank = Table(bank_data, colWidths=[doc.width/2.0]*2)
+    t_bank = Table(bank_data, colWidths=[267.5, 267.5])
     t_bank.setStyle(TableStyle([
         ('BOX', (0,0), (-1,-1), 1, colors.HexColor("#1B2D5B")),
         ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#D1D5DB")),
@@ -480,8 +708,8 @@ def generate_pdf(output_path, data):
     
     story.append(KeepTogether(t_bank))
     
-    # Build Document
-    doc.build(story, onFirstPage=draw_watermark_and_header, onLaterPages=draw_watermark_and_header)
+    # Build Document with subtle watermark
+    doc.build(story, onFirstPage=draw_watermark, onLaterPages=draw_watermark)
     print(f"Successfully generated PDF at {output_path}")
 
 def main():

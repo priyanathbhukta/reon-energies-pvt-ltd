@@ -1,3 +1,4 @@
+import { isWestBengal, calculateTaxes } from './admin_proforma_invoices.js';
 import express from 'express';
 import { execFile } from 'child_process';
 import path from 'path';
@@ -126,6 +127,13 @@ router.post('/', async (req, res) => {
 
   const client = await pool.connect();
   try {
+    const taxInfo = calculateTaxes(data.customerDetails, data.items, data.charges);
+    data.items = taxInfo.items;
+    data.subtotal = taxInfo.subtotal;
+    data.cgstTotal = taxInfo.cgstTotal;
+    data.sgstTotal = taxInfo.sgstTotal;
+    data.igstTotal = taxInfo.igstTotal;
+    data.grandTotal = taxInfo.grandTotal;
     const jsonPayload = JSON.stringify(data);
     console.log(`[PDF] Generating Invoice: ${pdfFileName}`);
 
@@ -198,11 +206,11 @@ router.post('/', async (req, res) => {
     const invoiceQuery = `
       INSERT INTO invoices (
         invoice_no, company_details, customer_details, ship_to_details, same_as_bill_to,
-        invoice_details, items, subtotal, cgst_total, sgst_total, grand_total, pdf_url,
+        invoice_details, items, subtotal, cgst_total, sgst_total, igst_total, grand_total, pdf_url,
         quotation_id, quotation_no, lead_id, partner_id, pos_name, pos_id, user_id,
         source_proforma_invoice_id, proforma_invoice_no, payment_status, total_received,
         outstanding_amount, authorized_signature_url, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,'unpaid',0.00,$11,$22,NOW())
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,'unpaid',0.00,$12,$23,NOW())
       ON CONFLICT (invoice_no) DO UPDATE SET
         company_details = EXCLUDED.company_details,
         customer_details = EXCLUDED.customer_details,
@@ -213,6 +221,7 @@ router.post('/', async (req, res) => {
         subtotal = EXCLUDED.subtotal,
         cgst_total = EXCLUDED.cgst_total,
         sgst_total = EXCLUDED.sgst_total,
+        igst_total = EXCLUDED.igst_total,
         grand_total = EXCLUDED.grand_total,
         pdf_url = EXCLUDED.pdf_url,
         quotation_id = COALESCE(EXCLUDED.quotation_id, invoices.quotation_id),
@@ -236,10 +245,11 @@ router.post('/', async (req, res) => {
       sameAsBillTo,
       JSON.stringify(data.invoiceDetails || {}),
       JSON.stringify(data.items || []),
-      data.subtotal || 0,
-      data.cgstTotal || 0,
-      data.sgstTotal || 0,
-      grandTotal,
+      taxInfo.subtotal,
+      taxInfo.cgstTotal,
+      taxInfo.sgstTotal,
+      taxInfo.igstTotal,
+      taxInfo.grandTotal,
       pdfUrl,
       quotationId,
       quotationNo,
