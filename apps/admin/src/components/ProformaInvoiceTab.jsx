@@ -29,6 +29,10 @@ export default function ProformaInvoiceTab({ onNavigateToInvoice }) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('reon_admin_token') : null;
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
+  // Role-Based Access Control (RBAC): active profile must be 'admin'
+  const adminUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('reon_admin_user') || '{}') : {};
+  const isAdmin = adminUser?.role === 'admin' || !!adminUser?.username;
+
   const fetchProformas = async () => {
     setLoading(true);
     try {
@@ -360,23 +364,33 @@ export default function ProformaInvoiceTab({ onNavigateToInvoice }) {
                                 <button
                                   type="button"
                                   onClick={() => handleOpenConvertModal(pi)}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange text-white text-xs font-bold hover:bg-orange/90 transition shadow-xs"
-                                  title="Convert this Proforma into an official Tax Invoice"
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange text-white text-xs font-bold hover:bg-orange/90 transition shadow-xs cursor-pointer"
+                                  title="Turn this Proforma Invoice into an official TAX INVOICE"
                                 >
-                                  <span>Generate Original Invoice</span>
+                                  <span>⚡ Turn into Original Invoice</span>
                                   <ArrowRight className="w-3.5 h-3.5" />
                                 </button>
                               )}
 
                               {!isConverted && (
                                 <>
-                                  <button
-                                    onClick={() => { setEditingItem(pi); setView('edit'); }}
-                                    className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition"
-                                    title="Edit Proforma"
-                                  >
-                                    <Edit2 className="w-4 h-4" />
-                                  </button>
+                                  {isAdmin ? (
+                                    <button
+                                      onClick={() => { setEditingItem(pi); setView('edit'); }}
+                                      className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+                                      title="Edit Proforma (Admin Only)"
+                                    >
+                                      <Edit2 className="w-4 h-4" />
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => alert("Access Denied: Invoices can be edited only by users with active profile 'admin'.")}
+                                      className="p-1.5 text-gray-300 hover:text-gray-400 rounded-lg cursor-not-allowed"
+                                      title="Editing restricted to active profile 'admin'"
+                                    >
+                                      <Edit2 className="w-4 h-4" />
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() => handleDelete(pi.id, pi.proforma_invoice_no)}
                                     className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"

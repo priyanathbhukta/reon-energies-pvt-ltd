@@ -4,10 +4,32 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import util from 'util';
+import jwt from 'jsonwebtoken';
 import pool from '../db.js';
 
 const execFileAsync = util.promisify(execFile);
 const router = express.Router();
+
+function requireAdminRole(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const role = decoded.role || (decoded.username ? 'admin' : null);
+    if (role !== 'admin') {
+      return res.status(403).json({
+        error: "Access denied: Proforma invoice editing is strictly restricted to active profile 'admin'."
+      });
+    }
+    req.admin = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid or expired authentication token.' });
+  }
+}
 
 function getBaseUrl(req) {
   const proto = req.headers['x-forwarded-proto'] || req.protocol;
@@ -476,6 +498,149 @@ router.post('/:id/generate-invoice', async (req, res) => {
     await client.query('ROLLBACK');
     console.error('Failed to generate original invoice from proforma:', err);
     res.status(500).json({ error: 'Failed to generate original invoice', details: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// ── PUT /api/admin/proforma-invoices/:id (Role-Based Access Control: Admin only) ──
+router.put('/:id', requireAdminRole, async (req, res) => {
+  const { id } = req.params;
+  const {
+    companyDetails,
+    customerDetails,
+    shipToDetails,
+    sameAsBillTo,
+    invoiceDetails,
+    items,
+    charges,
+    subtotal,
+    cgstTotal,
+    sgstTotal,
+    grandTotal,
+    validUntil,
+    quotation_id,
+    quotation_no,
+    partner_id,
+    pos_name,
+    pos_id,
+    authorizedSignatureUrl,
+  } = req.body;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const existingRes = await client.query('SELECT * FROM proforma_invoices WHERE id = $1', [id]);
+    if (existingRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Proforma invoice not found.' });
+    }
+    const pi = existingRes.rows[0];
+
+    if (pi.status === 'converted' || pi.generated_invoice_id) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Cannot modify a Proforma Invoice that has already been converted into an Original Tax Invoice.' });
+    }
+
+    const proformaInvoiceNo = invoiceDetails?.invoiceNo || pi.proforma_invoice_no;
+    const invoiceDate = invoiceDetails?.invoiceDate || pi.created_at;
+
+    const pdfFileName = `PI-${proformaInvoiceNo.replace(/\//g, '-')}.pdf`;
+    const outputPath = path.join(PDF_DIR, pdfFileName);
+    const pdfUrl = `/pdfs/${pdfFileName}`;
+
+    const updateQuery = `
+      UPDATE proforma_invoices
+      SET company_details = $1,
+          customer_details = $2,
+          ship_to_details = $3,
+          same_as_bill_to = $4,
+          invoice_details = $5,
+          items = $6,
+          charges = $7,
+          subtotal = $8,
+          cgst_total = $9,
+          sgst_total = $10,
+          grand_total = $11,
+          valid_until = $12,
+          quotation_id = $13,
+          quotation_no = $14,
+          partner_id = $15,
+          pos_name = $16,
+          pos_id = $17,
+          authorized_signature_url = $18,
+          pdf_url = $19,
+          updated_at = NOW()
+      WHERE id = $20
+      RETURNING *
+    `;
+
+    const updatedResult = await client.query(updateQuery, [
+      JSON.stringify(companyDetails || {}),
+      JSON.stringify(customerDetails || {}),
+      JSON.stringify(shipToDetails || {}),
+      sameAsBillTo !== false,
+      JSON.stringify(invoiceDetails || {}),
+      JSON.stringify(items || []),
+      JSON.stringify(charges || {}),
+      subtotal,
+      cgstTotal,
+      sgstTotal,
+      grandTotal,
+      validUntil || pi.valid_until,
+      quotation_id || pi.quotation_id,
+      quotation_no || pi.quotation_no,
+      partner_id || pi.partner_id,
+      pos_name || pi.pos_name,
+      pos_id || pi.pos_id,
+      authorizedSignatureUrl || pi.authorized_signature_url,
+      pdfUrl,
+      id
+    ]);
+
+    // Re-generate Proforma Invoice PDF with heading PROFORMA INVOICE
+    const pyPayload = {
+      isProforma: true,
+      documentType: 'PROFORMA INVOICE',
+      companyDetails,
+      customerDetails,
+      shipToDetails: sameAsBillTo !== false ? customerDetails : (shipToDetails || customerDetails),
+      sameAsBillTo: sameAsBillTo !== false,
+      invoiceDetails: {
+        ...(invoiceDetails || {}),
+        proformaInvoiceNo,
+        invoiceDate,
+        validUntil: validUntil || pi.valid_until
+      },
+      items,
+      charges,
+      subtotal,
+      cgstTotal,
+      sgstTotal,
+      grandTotal,
+      quotationNo: quotation_no || pi.quotation_no,
+      authorizedSignatureUrl: authorizedSignatureUrl || pi.authorized_signature_url,
+    };
+
+    await execFileAsync(runPythonCommand, [SCRIPT_PATH, '--output', outputPath], {
+      env: { ...process.env, REON_INVOICE_JSON: JSON.stringify(pyPayload) },
+      timeout: 30000,
+    });
+
+    await client.query('COMMIT');
+
+    const baseUrl = getBaseUrl(req);
+    res.json({
+      success: true,
+      message: 'Proforma Invoice updated successfully by administrator.',
+      proformaInvoice: updatedResult.rows[0],
+      pdfUrl: `${baseUrl}${pdfUrl}`
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Update proforma error:', err);
+    res.status(500).json({ error: err.message || 'Failed to update proforma invoice.' });
   } finally {
     client.release();
   }

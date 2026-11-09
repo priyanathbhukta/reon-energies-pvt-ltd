@@ -4,10 +4,36 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import util from 'util';
+import jwt from 'jsonwebtoken';
 import pool from '../db.js';
 
 const execFileAsync = util.promisify(execFile);
 const router = express.Router();
+
+/**
+ * Role-Based Access Control Middleware
+ * Invoices are editable ONLY by users with active profile 'admin'.
+ */
+function requireAdminRole(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const role = decoded.role || (decoded.username ? 'admin' : null);
+    if (role !== 'admin') {
+      return res.status(403).json({
+        error: "Access denied: Invoice editing is strictly restricted to active profile 'admin'."
+      });
+    }
+    req.admin = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid or expired authentication token.' });
+  }
+}
 
 function getBaseUrl(req) {
   const proto = req.headers['x-forwarded-proto'] || req.protocol;
@@ -551,6 +577,128 @@ router.get('/:id', async (req, res) => {
   } catch (err) {
     console.error('Get invoice details error:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/admin/invoices/:id (Role-Based Access Control: Admin only)
+router.put('/:id', requireAdminRole, async (req, res) => {
+  const { id } = req.params;
+  const {
+    companyDetails,
+    customerDetails,
+    shipToDetails,
+    sameAsBillTo,
+    invoiceDetails,
+    items,
+    charges,
+    subtotal,
+    cgstTotal,
+    sgstTotal,
+    grandTotal,
+    quotation_id,
+    quotation_no,
+    authorizedSignatureUrl
+  } = req.body;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const existingRes = await client.query('SELECT * FROM invoices WHERE id = $1', [id]);
+    if (existingRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Invoice not found.' });
+    }
+    const inv = existingRes.rows[0];
+
+    const invoiceNo = invoiceDetails?.invoiceNo || inv.invoice_no;
+    const invoiceDate = invoiceDetails?.invoiceDate || inv.created_at;
+
+    const pdfFileName = `INV-${invoiceNo.replace(/\//g, '-')}.pdf`;
+    const outputPath = path.join(PDF_DIR, pdfFileName);
+    const pdfUrl = `/pdfs/${pdfFileName}`;
+
+    const updateQuery = `
+      UPDATE invoices
+      SET company_details = $1,
+          customer_details = $2,
+          ship_to_details = $3,
+          same_as_bill_to = $4,
+          invoice_details = $5,
+          items = $6,
+          charges = $7,
+          subtotal = $8,
+          cgst_total = $9,
+          sgst_total = $10,
+          grand_total = $11,
+          quotation_id = $12,
+          quotation_no = $13,
+          authorized_signature_url = $14,
+          pdf_url = $15,
+          updated_at = NOW()
+      WHERE id = $16
+      RETURNING *
+    `;
+
+    const updatedResult = await client.query(updateQuery, [
+      JSON.stringify(companyDetails || {}),
+      JSON.stringify(customerDetails || {}),
+      JSON.stringify(shipToDetails || {}),
+      sameAsBillTo !== false,
+      JSON.stringify(invoiceDetails || {}),
+      JSON.stringify(items || []),
+      JSON.stringify(charges || {}),
+      subtotal,
+      cgstTotal,
+      sgstTotal,
+      grandTotal,
+      quotation_id || inv.quotation_id,
+      quotation_no || inv.quotation_no,
+      authorizedSignatureUrl || inv.authorized_signature_url,
+      pdfUrl,
+      id
+    ]);
+
+    // Re-generate Tax Invoice PDF with updated details
+    const pyPayload = {
+      isProforma: false,
+      documentType: 'TAX INVOICE',
+      companyDetails,
+      customerDetails,
+      shipToDetails: sameAsBillTo !== false ? customerDetails : (shipToDetails || customerDetails),
+      sameAsBillTo: sameAsBillTo !== false,
+      invoiceDetails: { ...(invoiceDetails || {}), invoiceNo, invoiceDate },
+      items,
+      charges,
+      subtotal,
+      cgstTotal,
+      sgstTotal,
+      grandTotal,
+      quotationNo: quotation_no || inv.quotation_no,
+      proformaInvoiceNo: inv.proforma_invoice_no,
+      authorizedSignatureUrl: authorizedSignatureUrl || inv.authorized_signature_url,
+    };
+
+    await execFileAsync(runPythonCommand, [SCRIPT_PATH, '--output', outputPath], {
+      env: { ...process.env, REON_INVOICE_JSON: JSON.stringify(pyPayload) },
+      timeout: 30000,
+    });
+
+    await client.query('COMMIT');
+
+    const baseUrl = getBaseUrl(req);
+    res.json({
+      success: true,
+      message: 'Invoice updated successfully by administrator.',
+      invoice: updatedResult.rows[0],
+      pdfUrl: `${baseUrl}${pdfUrl}`
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Update invoice error:', err);
+    res.status(500).json({ error: err.message || 'Failed to update invoice.' });
+  } finally {
+    client.release();
   }
 });
 

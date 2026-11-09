@@ -33,12 +33,12 @@ router.post('/login', async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: admin.id, username: admin.username },
+      { id: admin.id, username: admin.username, role: 'admin' },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
-    res.json({ token, admin: { id: admin.id, username: admin.username } });
+    res.json({ token, admin: { id: admin.id, username: admin.username, role: 'admin' } });
   } catch (err) {
     console.error('Login error:', err.message);
     res.status(500).json({ error: 'Login failed.' });
@@ -55,7 +55,7 @@ router.get('/verify', (req, res) => {
 
   try {
     const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET);
-    res.json({ valid: true, admin: { id: decoded.id, username: decoded.username } });
+    res.json({ valid: true, admin: { id: decoded.id, username: decoded.username, role: decoded.role || 'admin' } });
   } catch {
     res.status(401).json({ valid: false });
   }

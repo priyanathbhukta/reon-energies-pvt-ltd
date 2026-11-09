@@ -56,7 +56,9 @@ export default function GeneratedDocumentsTab({ onEditInvoice, onEditQuotation }
   const [otpModal, setOtpModal] = useState({ show: false, doc: null, loading: false, error: '' });
   const [otpInput, setOtpInput] = useState('');
 
-  const token = typeof window !== 'undefined' ? localStorage.getItem('reon_admin_token') : null;
+  // Role-Based Access Control (RBAC): Invoices editable by active profile 'admin' only
+  const adminUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('reon_admin_user') || '{}') : {};
+  const isAdmin = adminUser?.role === 'admin' || !!adminUser?.username;
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
   const fetchAllDocuments = async () => {
@@ -556,14 +558,25 @@ export default function GeneratedDocumentsTab({ onEditInvoice, onEditQuotation }
                               <Plus className="w-3 h-3" />
                               <span>Payment</span>
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => onEditInvoice(inv)}
-                              className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition"
-                              title="Edit Invoice"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
+                            {isAdmin ? (
+                              <button
+                                type="button"
+                                onClick={() => onEditInvoice(inv)}
+                                className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+                                title="Edit Invoice (Admin Only)"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => alert("Access Denied: Invoices can be edited only by users with active profile 'admin'.")}
+                                className="p-1.5 text-gray-300 hover:text-gray-400 rounded-lg cursor-not-allowed"
+                                title="Editing restricted to active profile 'admin'"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => triggerDelete('Invoice', inv.id, inv.invoice_no)}

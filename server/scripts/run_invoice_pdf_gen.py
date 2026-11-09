@@ -186,7 +186,7 @@ def generate_pdf(output_path, data):
     eway_bill = i_details.get('ewayBillNumber', '')
 
     right_info_lines = [
-        f"<b>{doc_title.title()} No:</b> {invoice_no}",
+        f"<b>{doc_title} No:</b> {invoice_no}",
         f"<b>{date_label}:</b> {date_val}",
     ]
     if validity_or_due_val:

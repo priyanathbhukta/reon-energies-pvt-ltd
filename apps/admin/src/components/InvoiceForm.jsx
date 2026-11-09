@@ -154,6 +154,13 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
   const [error, setError] = useState(null);
   const [successUrl, setSuccessUrl] = useState(null);
   const [generatedDocNo, setGeneratedDocNo] = useState('');
+  const [createdDocId, setCreatedDocId] = useState(null);
+  const [converting, setConverting] = useState(false);
+  const [conversionSuccess, setConversionSuccess] = useState(null);
+
+  // Role-Based Access Control (RBAC): Invoices editable by active profile 'admin' only
+  const adminUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('reon_admin_user') || '{}') : {};
+  const isAdmin = adminUser?.role === 'admin' || !!adminUser?.username;
 
   const [companyDetails, setCompanyDetails] = useState(INIT_COMPANY);
   const [customerDetails, setCustomerDetails] = useState(INIT_CUSTOMER);
@@ -458,17 +465,28 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
         authorizedSignatureUrl: signatureUrl || null,
       };
 
-      const endpoint = isProforma ? `${API}/api/admin/proforma-invoices` : `${API}/api/admin/invoices`;
-      const response = await fetch(endpoint, {
-        method: 'POST',
+      // RBAC verification if editing an existing invoice
+      if (editData && !isAdmin) {
+        throw new Error("Access denied: Invoices can be edited only by users with active profile 'admin'.");
+      }
+
+      const baseEndpoint = isProforma ? `${API}/api/admin/proforma-invoices` : `${API}/api/admin/invoices`;
+      const url = editData ? `${baseEndpoint}/${editData.id}` : baseEndpoint;
+      const method = editData ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(payload),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || `Failed to generate ${isProforma ? 'proforma invoice' : 'tax invoice'}`);
+      if (!response.ok) throw new Error(data.error || `Failed to ${editData ? 'update' : 'generate'} ${isProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'}`);
       if (data.success && data.pdfUrl) {
         setSuccessUrl(data.pdfUrl.startsWith('/pdfs/') ? `${API}${data.pdfUrl}` : data.pdfUrl);
         setGeneratedDocNo(data.proformaInvoiceNo || data.invoiceNo || invoiceDetails.invoiceNo);
+        const docId = data.proformaInvoice?.id || data.invoice?.id || data.id || editData?.id;
+        if (docId) setCreatedDocId(docId);
+        setConversionSuccess(null);
         if (onGenerated) onGenerated(data);
       } else {
         throw new Error('No PDF URL returned from server');
@@ -477,6 +495,33 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Turn newly generated Proforma Invoice into an Original Tax Invoice immediately
+  const handleConvertToOriginalInvoice = async () => {
+    if (!createdDocId) return;
+    if (!window.confirm(`Turn Proforma Invoice ${generatedDocNo} into an official TAX INVOICE?`)) return;
+    setConverting(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem('reon_admin_token');
+      const res = await fetch(`${API}/api/admin/proforma-invoices/${createdDocId}/generate-invoice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to turn into Tax Invoice');
+
+      setConversionSuccess(data);
+      const newPdf = data.pdfUrl?.startsWith('/pdfs/') ? `${API}${data.pdfUrl}` : data.pdfUrl;
+      setSuccessUrl(newPdf);
+      setGeneratedDocNo(data.invoiceNo);
+      if (onGenerated) onGenerated(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setConverting(false);
     }
   };
 
@@ -904,14 +949,15 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif', color: C.text, maxWidth: 880, margin: '0 auto' }}>
       <div style={{ background: isProforma ? '#0369A1' : C.navy, borderRadius: 10, padding: '14px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ background: C.orange, borderRadius: 6, padding: '4px 12px', fontWeight: 700, color: 'white', fontSize: 14 }}>REON</div>
+        <div style={{ background: C.orange, borderRadius: 6, padding: '4px 12px', fontWeight: 800, color: 'white', fontSize: 13, letterSpacing: '0.05em' }}>REON</div>
         <div style={{ flex: 1 }}>
-          <div style={{ color: 'white', fontWeight: 700, fontSize: 15 }}>
-            {editData ? (isProforma ? 'Edit Proforma Invoice' : 'Edit Tax Invoice') : (isProforma ? 'Proforma Invoice Generator' : 'Tax Invoice Generator')}
+          <div style={{ color: 'white', fontWeight: 800, fontSize: 17, letterSpacing: '0.05em' }}>
+            {isProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'}
+            {editData && <span style={{ fontSize: 12, fontWeight: 500, marginLeft: 10, opacity: 0.85 }}>(EDIT MODE)</span>}
           </div>
-          <div style={{ color: '#E0F2FE', fontSize: 11 }}>
+          <div style={{ color: '#E0F2FE', fontSize: 11, marginTop: 2 }}>
             {isProforma
-              ? 'Bank submission · Advance payment clearance · Single-click conversion to Tax Invoice'
+              ? 'Bank submission · Advance payment clearance · Single-click conversion to TAX INVOICE'
               : 'GST Compliant · Linked POS Conversion · Standard Accounting ReportLab PDF'}
           </div>
         </div>
@@ -929,20 +975,43 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
       
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 18, gap: 10 }}>
         {successUrl ? (
-          <>
-            <button onClick={() => { setStep(0); setSuccessUrl(null); }} style={{ padding: '10px 24px', border: `1.5px solid ${C.border}`, borderRadius: 8, background: 'white', color: C.text, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
-              Create Another
-            </button>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                type="button"
-                onClick={() => downloadPdfFile(successUrl, `${generatedDocNo.replace(/\//g, '_')}.pdf`)}
-                style={{ padding: '10px 32px', border: 'none', borderRadius: 8, background: C.green, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-              >
-                ⬇ Download {isProforma ? 'Proforma' : 'Invoice'} PDF ({generatedDocNo})
+          <div style={{ width: '100%' }}>
+            {conversionSuccess && (
+              <div style={{ marginBottom: 14, padding: '12px 16px', background: '#ECFDF5', border: '1px solid #6EE7B7', borderRadius: 8, color: '#065F46', fontSize: 13, fontWeight: 600 }}>
+                ✅ Successfully turned into TAX INVOICE: <strong>{conversionSuccess.invoiceNo}</strong>. Originating Quotation & Lead marked as Converted!
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+              <button onClick={() => { setStep(0); setSuccessUrl(null); setConversionSuccess(null); }} style={{ padding: '10px 24px', border: `1.5px solid ${C.border}`, borderRadius: 8, background: 'white', color: C.text, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+                Create Another
               </button>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => downloadPdfFile(successUrl, `${generatedDocNo.replace(/\//g, '_')}.pdf`)}
+                  style={{ padding: '10px 24px', border: 'none', borderRadius: 8, background: C.green, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                >
+                  ⬇ Download {isProforma && !conversionSuccess ? 'PROFORMA INVOICE' : 'TAX INVOICE'} PDF ({generatedDocNo})
+                </button>
+
+                {isProforma && createdDocId && !conversionSuccess && (
+                  <button
+                    type="button"
+                    onClick={handleConvertToOriginalInvoice}
+                    disabled={converting}
+                    style={{
+                      padding: '10px 24px', border: 'none', borderRadius: 8,
+                      background: C.orange, color: 'white', fontWeight: 800,
+                      fontSize: 13, cursor: 'pointer', display: 'inline-flex',
+                      alignItems: 'center', gap: 6, boxShadow: '0 2px 4px rgba(232,97,26,0.3)'
+                    }}
+                  >
+                    {converting ? '⏳ Turning into Tax Invoice…' : '⚡ Turn into Original TAX INVOICE'}
+                  </button>
+                )}
+              </div>
             </div>
-          </>
+          </div>
         ) : (
           <>
             <button onClick={() => setStep(Math.max(step - 1, 0))} disabled={step === 0 || loading} style={{ padding: '10px 24px', border: `1.5px solid ${C.border}`, borderRadius: 8, background: 'white', color: C.text, fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: step === 0 ? 0.4 : 1 }}>
@@ -954,7 +1023,7 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
               </button>
             ) : (
               <button onClick={handleSubmit} disabled={loading || !isValid()} style={{ padding: '10px 32px', border: 'none', borderRadius: 8, background: C.orange, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: loading ? 0.7 : 1 }}>
-                {loading ? '⏳ Generating…' : `📄 Generate ${isProforma ? 'Proforma' : 'Tax'} Invoice PDF`}
+                {loading ? '⏳ Processing…' : (editData ? `💾 Save Changes to ${isProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'}` : `📄 Generate ${isProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'} PDF`)}
               </button>
             )}
           </>
