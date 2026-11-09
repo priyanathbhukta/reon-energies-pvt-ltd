@@ -28,9 +28,10 @@ const sendPdfResponse = (res, filePath, filename, req) => {
 router.get('/:filename', async (req, res, next) => {
   const { filename } = req.params;
   const filePath = path.join(PDF_DIR, filename);
+  const forceRegen = req.query.regen === 'true';
 
-  // 1. If file exists on disk, serve it immediately with download disposition
-  if (fs.existsSync(filePath)) {
+  // 1. If file exists on disk and no forceRegen, serve it immediately with download disposition
+  if (fs.existsSync(filePath) && !forceRegen) {
     return sendPdfResponse(res, filePath, filename, req);
   }
 

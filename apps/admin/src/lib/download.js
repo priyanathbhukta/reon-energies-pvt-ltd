@@ -9,10 +9,13 @@ export async function downloadPdfFile(url, filename = 'document.pdf') {
   }
 
   const cleanFilename = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
+  const fetchUrl = (url.includes('/pdfs/') && !url.includes('regen='))
+    ? `${url}${url.includes('?') ? '&' : '?'}regen=true`
+    : url;
 
   try {
     // 1. Fetch file as binary blob
-    const res = await fetch(url);
+    const res = await fetch(fetchUrl);
     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
     const blob = await res.blob();
 

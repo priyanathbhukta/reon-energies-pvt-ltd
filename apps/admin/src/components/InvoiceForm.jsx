@@ -217,6 +217,10 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
   const [uploadingSig, setUploadingSig] = useState(false);
   const fileInputRef = useRef(null);
 
+  // Live Preview DOM Reference & Export States
+  const livePreviewRef = useRef(null);
+  const [exportingLivePdf, setExportingLivePdf] = useState(false);
+
   const [invoiceDetails, setInvoiceDetails] = useState({
     ...INIT_INVOICE_DETAILS,
     invoiceDate: new Date().toISOString().split('T')[0],
@@ -622,6 +626,72 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
     }
   };
 
+  /* ── Export Exact Live Preview Card to PDF via Client DOM Canvas ── */
+  const handleDownloadLivePreviewPdf = async () => {
+    if (!livePreviewRef.current) return;
+    try {
+      setExportingLivePdf(true);
+      const html2pdfModule = await import('html2pdf.js');
+      const html2pdf = html2pdfModule.default || html2pdfModule;
+      const element = livePreviewRef.current;
+      const docPrefix = isProforma && !conversionSuccess ? 'Proforma_Invoice' : 'Tax_Invoice';
+      const docNumber = (generatedDocNo || invoiceDetails.invoiceNo || 'REON').replace(/[^a-zA-Z0-9_-]/g, '_');
+
+      const opt = {
+        margin: [6, 6, 6, 6],
+        filename: `${docPrefix}_${docNumber}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2.5, useCORS: true, logging: false, backgroundColor: '#ffffff' },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      await html2pdf().set(opt).from(element).save();
+    } catch (err) {
+      console.error('Failed to export live preview to PDF:', err);
+      window.print();
+    } finally {
+      setExportingLivePdf(false);
+    }
+  };
+
+  /* ── Print / Save as PDF via native browser dialog ── */
+  const handlePrintPreview = () => {
+    if (!livePreviewRef.current) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+    const docTitle = `${isProforma && !conversionSuccess ? 'Proforma Invoice' : 'Tax Invoice'} - ${generatedDocNo || invoiceDetails.invoiceNo || 'REON'}`;
+    const previewHtml = livePreviewRef.current.outerHTML;
+    printWindow.document.open();
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${docTitle}</title>
+          <style>
+            @page { size: A4; margin: 8mm; }
+            body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background: white; color: #1A1A2E; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            * { box-sizing: border-box; }
+            table { border-collapse: collapse; }
+          </style>
+        </head>
+        <body>
+          ${previewHtml}
+          <script>
+            window.onload = function() {
+              window.focus();
+              window.print();
+              setTimeout(() => { window.close(); }, 1500);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   const ProgressBar = () => (
     <div style={{ display: 'flex', gap: 4, marginBottom: 24 }}>
       {STEPS.map((s, i) => (
@@ -957,16 +1027,46 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
         const grandTotal = getGrandTotal();
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
               <SectionHead title={`${isProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'} LIVE PREVIEW`} />
-              <div style={{ fontSize: 11.5, color: C.mid }}>Review and generate the official PDF</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={handleDownloadLivePreviewPdf}
+                  disabled={exportingLivePdf}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+                    background: C.teal, color: 'white', borderRadius: 6, border: 'none',
+                    fontSize: 12, fontWeight: 700, cursor: exportingLivePdf ? 'wait' : 'pointer'
+                  }}
+                  title="Download exact visual preview as PDF"
+                >
+                  {exportingLivePdf ? '⏳ Exporting…' : '📄 Save Live Preview as PDF'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrintPreview}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+                    background: 'white', color: C.navy, border: `1px solid ${C.navy}`,
+                    borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                  }}
+                  title="Print or Save via browser"
+                >
+                  🖨 Print
+                </button>
+              </div>
             </div>
 
             {/* A4 Paper Style Preview Container */}
-            <div style={{
-              background: 'white', border: `1.5px solid ${C.navy}`, borderRadius: 8,
-              padding: 24, boxShadow: '0 4px 14px rgba(0,0,0,0.06)', fontSize: 12
-            }}>
+            <div
+              ref={livePreviewRef}
+              id="reon-invoice-preview-card"
+              style={{
+                background: 'white', border: `1.5px solid ${C.navy}`, borderRadius: 8,
+                padding: 24, boxShadow: '0 4px 14px rgba(0,0,0,0.06)', fontSize: 12
+              }}
+            >
               {/* Header: Logo + Company Info on Left, Document Title & Meta on Right */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: `2px solid ${C.navy}`, paddingBottom: 16, marginBottom: 16 }}>
                 <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
@@ -1290,7 +1390,8 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
             <button
               onClick={() => {
                 const pdfName = (generatedDocNo || 'Invoice').replace(/\//g, '_') + '.pdf';
-                downloadPdfFile(successUrl, pdfName);
+                const bustCacheUrl = `${successUrl}${successUrl.includes('?') ? '&' : '?'}regen=true&v=${Date.now()}`;
+                downloadPdfFile(bustCacheUrl, pdfName);
               }}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px',
@@ -1298,7 +1399,30 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
                 border: 'none', cursor: 'pointer', fontSize: 13
               }}
             >
-              ⬇ Download {isProforma && !conversionSuccess ? 'PROFORMA INVOICE' : 'TAX INVOICE'} PDF ({generatedDocNo})
+              ⬇ Download Official PDF ({generatedDocNo})
+            </button>
+
+            <button
+              onClick={handleDownloadLivePreviewPdf}
+              disabled={exportingLivePdf}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px',
+                background: C.teal, color: 'white', fontWeight: 700, borderRadius: 8,
+                border: 'none', cursor: exportingLivePdf ? 'wait' : 'pointer', fontSize: 13
+              }}
+            >
+              {exportingLivePdf ? '⏳ Generating…' : '📄 Download Exact Live PDF'}
+            </button>
+
+            <button
+              onClick={handlePrintPreview}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px',
+                background: 'white', color: C.navy, border: `1px solid ${C.navy}`,
+                fontWeight: 700, borderRadius: 8, cursor: 'pointer', fontSize: 13
+              }}
+            >
+              🖨 Print / Save
             </button>
 
             {/* Turn into Original Tax Invoice CTA */}

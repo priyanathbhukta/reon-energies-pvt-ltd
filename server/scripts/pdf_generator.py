@@ -42,6 +42,7 @@ QR_PATH    = str(_HERE / "qr_reon.png")
 
 # Font paths for Linux, Windows, and Mac
 _FONT_CHOICES = [
+    (str(_HERE / "fonts" / "DejaVuSans.ttf"), str(_HERE / "fonts" / "DejaVuSans-Bold.ttf")),
     ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
     ("C:\\Windows\\Fonts\\arial.ttf", "C:\\Windows\\Fonts\\arialbd.ttf"),
     ("/System/Library/Fonts/Supplemental/Arial.ttf", "/System/Library/Fonts/Supplemental/Arial Bold.ttf"),

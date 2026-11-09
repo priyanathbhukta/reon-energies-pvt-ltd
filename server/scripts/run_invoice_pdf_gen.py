@@ -40,24 +40,32 @@ except ImportError:
     print("Error: Missing reportlab. Run: pip install reportlab", file=sys.stderr)
     sys.exit(1)
 
+# ── Font Registration for Unicode & Indian Rupee (₹) Symbol ─────────────────
+font_dir = os.path.join(os.path.dirname(__file__), 'fonts')
+bundled_reg = os.path.join(font_dir, 'DejaVuSans.ttf')
+bundled_bold = os.path.join(font_dir, 'DejaVuSans-Bold.ttf')
+
 _FONT_CHOICES = [
-    # 1. Linux / Render system fonts (dejavu, freesans, liberation)
+    # 1. Bundled DejaVu fonts in server/scripts/fonts (100% reliable on every OS & Render)
+    (bundled_reg, bundled_bold),
+    # 2. Linux / Render system fonts
     ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
     ("/usr/share/fonts/truetype/freefont/FreeSans.ttf", "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf"),
     ("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
-    # 2. Windows system fonts (Arial, Segoe UI)
+    # 3. Windows system fonts (Arial, Segoe UI)
     ("C:\\Windows\\Fonts\\arial.ttf", "C:\\Windows\\Fonts\\arialbd.ttf"),
     ("C:\\Windows\\Fonts\\segoeui.ttf", "C:\\Windows\\Fonts\\segoeuib.ttf"),
-    # 3. Mac fonts
+    # 4. Mac fonts
     ("/System/Library/Fonts/Supplemental/Arial.ttf", "/System/Library/Fonts/Supplemental/Arial Bold.ttf"),
     ("/Library/Fonts/Arial.ttf", "/Library/Fonts/Arial Bold.ttf")
 ]
 
 FN_REG = "Helvetica"
 FN_BOLD = "Helvetica-Bold"
+RUPEE_PREFIX = "₹"
 
 def _register_fonts():
-    global FN_REG, FN_BOLD
+    global FN_REG, FN_BOLD, RUPEE_PREFIX
     for r_path, b_path in _FONT_CHOICES:
         if os.path.exists(r_path) and os.path.exists(b_path):
             try:
@@ -66,9 +74,13 @@ def _register_fonts():
                 pdfmetrics.registerFontFamily("ReonFont", normal="ReonFont", bold="ReonFont-Bold")
                 FN_REG = "ReonFont"
                 FN_BOLD = "ReonFont-Bold"
+                RUPEE_PREFIX = "₹"
                 return True
-            except Exception:
+            except Exception as e:
+                print(f"Font registration notice for {r_path}: {e}", file=sys.stderr)
                 continue
+    # Fallback if no TTF font found
+    RUPEE_PREFIX = "Rs. "
     return False
 
 _register_fonts()
@@ -123,7 +135,7 @@ def format_inr(v, symbol=True):
     except (ValueError, TypeError):
         val = 0.0
     s = f"{val:,.2f}"
-    return f"₹{s}" if symbol else s
+    return f"{RUPEE_PREFIX}{s}" if symbol else s
 
 def is_west_bengal(state_str, gstin=""):
     """
@@ -144,7 +156,6 @@ def sanitize_customer_text(text):
     """
     if not text:
         return ""
-    # Strip (POS: ...) or (Direct) or POS employee information
     cleaned = re.sub(r'\s*\((?:POS|pos)[^)]*\)', '', str(text))
     cleaned = re.sub(r'\s*\(Direct\)', '', cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r'\bPOS\s*Partner:?[^\n,]*', '', cleaned, flags=re.IGNORECASE)
@@ -165,7 +176,7 @@ class InvoicePDFTemplate(SimpleDocTemplate):
 def draw_watermark(canvas_obj, doc):
     canvas_obj.saveState()
     canvas_obj.setFont(FN_BOLD, 36)
-    canvas_obj.setFillColor(colors.lightgrey, alpha=0.12)
+    canvas_obj.setFillColor(colors.lightgrey, alpha=0.10)
     canvas_obj.translate(A4[0]/2, A4[1]/2)
     canvas_obj.rotate(45)
     canvas_obj.drawCentredString(0, 0, "REON ENERGIES PRIVATE LIMITED")
@@ -191,7 +202,7 @@ def get_signature_image(data):
 
     if sig_path and os.path.exists(sig_path):
         try:
-            return RLImage(sig_path, width=110, height=45, preserveAspectRatio=True)
+            return RLImage(sig_path, width=110, height=45)
         except Exception as e:
             print(f"Warning: Could not load signature image: {e}", file=sys.stderr)
     return None
@@ -203,17 +214,35 @@ def get_logo_image():
     candidates = [
         os.path.join(os.path.dirname(__file__), 'reon_logo.png'),
         os.path.join(os.path.dirname(__file__), 'REON_ENERGIES.png'),
+        os.path.join(os.path.dirname(__file__), '..', '..', 'apps', 'admin', 'public', 'reon_logo.png'),
         os.path.join(os.path.dirname(__file__), '..', '..', 'apps', 'web', 'public', 'logo_latest.png'),
         os.path.join(os.path.dirname(__file__), '..', '..', 'apps', 'web', 'public', 'logo_final_cropped.png'),
-        os.path.join(os.path.dirname(__file__), '..', '..', 'apps', 'admin', 'public', 'reon_logo.png'),
     ]
     for p in candidates:
         if os.path.exists(p):
             try:
-                # 447 x 209 aspect ratio -> width=105, height=49.1
-                return RLImage(p, width=105, height=49, preserveAspectRatio=True)
+                # 447 x 209 aspect ratio -> width=105, height=49
+                return RLImage(p, width=105, height=49)
             except Exception as e:
                 print(f"Warning: Failed to load logo {p}: {e}", file=sys.stderr)
+    return None
+
+def get_qr_image():
+    """
+    Search for official REON UPI QR code image asset.
+    """
+    candidates = [
+        os.path.join(os.path.dirname(__file__), 'qr_reon.png'),
+        os.path.join(os.path.dirname(__file__), '..', '..', 'apps', 'admin', 'public', 'qr_reon.png'),
+        os.path.join(os.path.dirname(__file__), '..', '..', 'apps', 'pos', 'public', 'qr_reon.png'),
+        os.path.join(os.path.dirname(__file__), '..', 'public', 'qr_reon.png'),
+    ]
+    for p in candidates:
+        if os.path.exists(p):
+            try:
+                return RLImage(p, width=65, height=65)
+            except Exception as e:
+                print(f"Warning: Failed to load QR code {p}: {e}", file=sys.stderr)
     return None
 
 def generate_pdf(output_path, data):
@@ -412,7 +441,6 @@ def generate_pdf(output_path, data):
     tot_igst = 0.0
 
     # Rate-wise GST aggregation dictionary
-    # rate_pct -> { taxable, cgst, sgst, igst }
     gst_rate_summary = {}
 
     for idx, item in enumerate(items):
@@ -456,7 +484,6 @@ def generate_pdf(output_path, data):
         gst_rate_summary[tax_pct]['sgst'] += sgst_amt
         gst_rate_summary[tax_pct]['igst'] += igst_amt
 
-        # Item-wise Invoice Value = item_taxable (as per standard Indian invoice item value)
         item_invoice_value = item_taxable
 
         # Sanitize item description to remove any POS operator text
@@ -503,15 +530,13 @@ def generate_pdf(output_path, data):
     t_items.setStyle(TableStyle([
         ('BOX', (0,0), (-1,-1), 1.2, colors.HexColor("#1B2D5B")),
         ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#D1D5DB")),
+        ('FONTNAME', (0,0), (-1,-1), FN_REG),
+        ('FONTSIZE', (0,0), (-1,-1), 8),
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1B2D5B")),
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,0), 8),
+        ('FONTNAME', (0,0), (-1,0), FN_BOLD),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        # Alignment requirements:
-        # Description: Left aligned
-        # HSN/SSN, Qty, Per, GST: Center aligned
-        # Rate, Invoice Value: Right aligned
+        # Alignment: Description: Left, HSN/Qty/Per/GST: Center, Rate/Invoice Value: Right
         ('ALIGN', (0,1), (0,-1), 'CENTER'),
         ('ALIGN', (1,1), (1,-1), 'LEFT'),
         ('ALIGN', (2,1), (2,-1), 'CENTER'),
@@ -522,15 +547,14 @@ def generate_pdf(output_path, data):
         ('ALIGN', (7,1), (7,-1), 'RIGHT'),
         ('PADDING', (0,0), (-1,-1), 4.5),
         ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor("#F3F4F6")),
-        ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+        ('FONTNAME', (0,-1), (-1,-1), FN_BOLD),
         ('LINEABOVE', (0,-1), (-1,-1), 1, colors.HexColor("#1B2D5B")),
     ]))
     story.append(t_items)
     story.append(Spacer(1, 10))
 
     # ── 4. GST Summary Table & Financial Summary Block (Side by Side) ───────
-    # GST Summary Table (Required structure):
-    # | GST Component | Rate | Amount |
+    # GST Summary Table:
     gst_summary_data = [
         [
             Paragraph("<b>GST Component</b>", styleBold),
@@ -544,7 +568,6 @@ def generate_pdf(output_path, data):
         sorted_rates = [18.0]
 
     if intra_state:
-        # West Bengal: IGST is 0%, CGST and SGST show calculated amounts
         gst_summary_data.append(["IGST", "0%", format_inr(0)])
         for r in sorted_rates:
             c_amt = gst_rate_summary.get(r, {}).get('cgst', 0.0)
@@ -552,7 +575,6 @@ def generate_pdf(output_path, data):
             gst_summary_data.append([f"CGST ({r/2:g}%)", f"{r/2:g}%", format_inr(c_amt)])
             gst_summary_data.append([f"SGST ({r/2:g}%)", f"{r/2:g}%", format_inr(s_amt)])
     else:
-        # Another State: IGST shows calculated amounts, CGST and SGST are 0%
         for r in sorted_rates:
             i_amt = gst_rate_summary.get(r, {}).get('igst', 0.0)
             gst_summary_data.append([f"IGST ({r:g}%)", f"{r:g}%", format_inr(i_amt)])
@@ -570,13 +592,16 @@ def generate_pdf(output_path, data):
     t_gst_summary.setStyle(TableStyle([
         ('BOX', (0,0), (-1,-1), 1, colors.HexColor("#1B2D5B")),
         ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#D1D5DB")),
+        ('FONTNAME', (0,0), (-1,-1), FN_REG),
+        ('FONTSIZE', (0,0), (-1,-1), 8),
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#F3F4F6")),
+        ('FONTNAME', (0,0), (-1,0), FN_BOLD),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
         ('ALIGN', (0,1), (0,-1), 'LEFT'),
         ('ALIGN', (1,1), (1,-1), 'CENTER'),
         ('ALIGN', (2,1), (2,-1), 'RIGHT'),
         ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor("#EBF9FB")),
-        ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+        ('FONTNAME', (0,-1), (-1,-1), FN_BOLD),
         ('PADDING', (0,0), (-1,-1), 4),
     ]))
 
@@ -608,11 +633,13 @@ def generate_pdf(output_path, data):
     t_fin_summary.setStyle(TableStyle([
         ('BOX', (0,0), (-1,-1), 1, colors.HexColor("#1B2D5B")),
         ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor("#D1D5DB")),
+        ('FONTNAME', (0,0), (-1,-1), FN_REG),
+        ('FONTSIZE', (0,0), (-1,-1), 8),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
         ('ALIGN', (0,0), (0,-1), 'LEFT'),
         ('ALIGN', (1,0), (1,-1), 'RIGHT'),
         ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor("#FEF3C7")),
-        ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+        ('FONTNAME', (0,-1), (-1,-1), FN_BOLD),
         ('PADDING', (0,0), (-1,-1), 4),
     ]))
 
@@ -637,13 +664,7 @@ def generate_pdf(output_path, data):
     story.append(Spacer(1, 12))
 
     # ── 5. Bank Details, QR & Signatory Section ─────────────────────────────
-    qr_img = None
-    qr_candidate = os.path.join(os.path.dirname(__file__), 'qr_reon.png')
-    if os.path.exists(qr_candidate):
-        try:
-            qr_img = RLImage(qr_candidate, width=55, height=55, preserveAspectRatio=True)
-        except Exception:
-            qr_img = None
+    qr_img = get_qr_image()
 
     bank_details_p = Paragraph(
         "<b>Company's Bank Details:</b><br/>"
@@ -657,8 +678,11 @@ def generate_pdf(output_path, data):
 
     if qr_img:
         bank_box = Table(
-            [[bank_details_p, Table([[qr_img], [Paragraph("<font size=6 color='#4B5563'>Scan to Pay (UPI)</font>", styleCenter)]], colWidths=[65])]],
-            colWidths=[200, 65]
+            [[
+                bank_details_p,
+                Table([[qr_img], [Paragraph("<font size=6 color='#4B5563'>Scan to Pay (UPI)</font>", styleCenter)]], colWidths=[70])
+            ]],
+            colWidths=[195, 70]
         )
         bank_box.setStyle(TableStyle([
             ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
