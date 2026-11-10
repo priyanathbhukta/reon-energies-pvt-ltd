@@ -49,18 +49,25 @@ router.get('/:filename', async (req, res, next) => {
       }
       
       const inv = result.rows[0];
+      const invDetails = typeof inv.invoice_details === 'string' ? JSON.parse(inv.invoice_details) : (inv.invoice_details || {});
+      invDetails.invoiceNo = inv.invoice_no || invDetails.invoiceNo;
+      delete invDetails.proformaInvoiceNo;
+
       const payload = {
         isProforma: false,
+        is_proforma: false,
         documentType: 'TAX INVOICE',
         companyDetails: typeof inv.company_details === 'string' ? JSON.parse(inv.company_details) : inv.company_details,
         customerDetails: typeof inv.customer_details === 'string' ? JSON.parse(inv.customer_details) : inv.customer_details,
         shipToDetails: typeof inv.ship_to_details === 'string' ? JSON.parse(inv.ship_to_details) : inv.ship_to_details,
         sameAsBillTo: inv.same_as_bill_to !== false,
-        invoiceDetails: typeof inv.invoice_details === 'string' ? JSON.parse(inv.invoice_details) : inv.invoice_details,
+        invoiceDetails: invDetails,
         items: typeof inv.items === 'string' ? JSON.parse(inv.items) : inv.items,
+        charges: typeof inv.charges === 'string' ? JSON.parse(inv.charges) : (inv.charges || {}),
         subtotal: inv.subtotal,
         cgstTotal: inv.cgst_total,
         sgstTotal: inv.sgst_total,
+        igstTotal: inv.igst_total || 0,
         grandTotal: inv.grand_total,
         proformaInvoiceNo: inv.proforma_invoice_no,
         quotationNo: inv.quotation_no,

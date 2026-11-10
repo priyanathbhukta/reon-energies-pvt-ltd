@@ -352,14 +352,29 @@ export default function ProformaInvoiceTab({ onNavigateToInvoice }) {
 
                               {/* Prominent CTA: Generate Original Invoice */}
                               {isConverted ? (
-                                <button
-                                  type="button"
-                                  disabled
-                                  className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-400 text-xs font-semibold cursor-not-allowed border border-gray-200"
-                                  title="Tax Invoice already generated from this Proforma Invoice"
-                                >
-                                  Invoice Generated
-                                </button>
+                                <div className="inline-flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    disabled
+                                    className="px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-500 text-xs font-semibold cursor-default border border-gray-200"
+                                    title="Tax Invoice already generated from this Proforma Invoice"
+                                  >
+                                    Converted
+                                  </button>
+                                  {pi.generated_invoice_no && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const invPdfUrl = `${API}/pdfs/${pi.generated_invoice_no.replace(/\//g, '-')}.pdf`;
+                                        downloadPdfFile(invPdfUrl, `${pi.generated_invoice_no.replace(/\//g, '_')}.pdf`);
+                                      }}
+                                      className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition cursor-pointer border border-emerald-200 bg-emerald-50/50"
+                                      title={`Download Converted Tax Invoice (${pi.generated_invoice_no})`}
+                                    >
+                                      <FileText className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                </div>
                               ) : (
                                 <button
                                   type="button"
@@ -424,7 +439,7 @@ export default function ProformaInvoiceTab({ onNavigateToInvoice }) {
                 </div>
                 <h3 className="text-lg font-bold text-navy">Original Tax Invoice Generated!</h3>
                 <p className="text-sm text-gray-600 mt-2">
-                  Invoice Number: <strong className="font-mono text-navy">{convertModal.successResult.invoiceNo}</strong>
+                  Invoice Number: <strong className="font-mono text-navy">{convertModal.successResult.invoiceNo || convertModal.successResult.invoice?.invoice_no}</strong>
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
                   The linked quotation and POS lead have been updated to <strong>Converted</strong>.
@@ -435,11 +450,13 @@ export default function ProformaInvoiceTab({ onNavigateToInvoice }) {
                       type="button"
                       onClick={() => {
                         const u = convertModal.successResult.pdfUrl;
-                        downloadPdfFile(u.startsWith('/pdfs/') ? `${API}${u}` : u, `${convertModal.successResult.invoiceNo?.replace(/\//g, '_') || 'Tax_Invoice'}.pdf`);
+                        const invNo = convertModal.successResult.invoiceNo || convertModal.successResult.invoice?.invoice_no;
+                        downloadPdfFile(u.startsWith('/pdfs/') ? `${API}${u}` : u, `${invNo?.replace(/\//g, '_') || 'Tax_Invoice'}.pdf`);
                       }}
-                      className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition cursor-pointer"
+                      className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition cursor-pointer flex items-center gap-2"
                     >
-                      ⬇ Download Tax Invoice PDF
+                      <FileDown className="w-4 h-4" />
+                      <span>Download Tax Invoice PDF</span>
                     </button>
                   )}
                   <button

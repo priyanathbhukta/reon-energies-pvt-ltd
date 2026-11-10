@@ -227,6 +227,14 @@ def get_logo_image():
                 print(f"Warning: Failed to load logo {p}: {e}", file=sys.stderr)
     return None
 
+def safe_float(val, default=0.0):
+    try:
+        if val is None or val == '':
+            return default
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
 def get_qr_image():
     """
     Search for official REON UPI QR code image asset.
@@ -278,12 +286,17 @@ def generate_pdf(output_path, data):
     doc = InvoicePDFTemplate(output_path)
     story = []
     
-    is_proforma = bool(
-        data.get('isProforma') or 
-        data.get('is_proforma') or 
-        data.get('documentType') == 'PROFORMA INVOICE'
-    )
-    doc_title = "PROFORMA INVOICE" if is_proforma else "TAX INVOICE"
+    doc_type = str(data.get('documentType', '')).strip().upper()
+    if doc_type == 'TAX INVOICE':
+        is_proforma = False
+    elif doc_type == 'PROFORMA INVOICE':
+        is_proforma = True
+    else:
+        is_proforma = bool(data.get('isProforma') or data.get('is_proforma'))
+        if str(data.get('isProforma')).lower() == 'false' or str(data.get('is_proforma')).lower() == 'false':
+            is_proforma = False
+
+    doc_title = "PROFORMA INVOICE" if is_proforma else "TAX INVOICE" 
     
     c_details = data.get('companyDetails', {})
     cust_details = data.get('customerDetails', {})
@@ -300,7 +313,12 @@ def generate_pdf(output_path, data):
     intra_state = is_west_bengal(bill_to_state, bill_to_gstin)
 
     # Document reference values
-    invoice_no = i_details.get('proformaInvoiceNo') if is_proforma else i_details.get('invoiceNo', '')
+    if not is_proforma:
+        invoice_no = i_details.get('invoiceNo') or data.get('invoiceNo') or ''
+        if not invoice_no and i_details.get('proformaInvoiceNo'):
+            invoice_no = i_details.get('proformaInvoiceNo')
+    else:
+        invoice_no = i_details.get('proformaInvoiceNo') or i_details.get('invoiceNo') or data.get('proformaInvoiceNo') or ''
     if not invoice_no:
         invoice_no = i_details.get('invoiceNo', '')
         
@@ -322,7 +340,8 @@ def generate_pdf(output_path, data):
         f"Singherbheri, Singur, Hooghly, West Bengal, 712409<br/>"
         f"<b>Contact:</b> 8436649991 | <b>Email:</b> info@reonenergy.in<br/>"
         f"<b>Website:</b> www.reonenergy.in<br/>"
-        f"<b>GSTIN:</b> {c_details.get('gstin', '19AAPCR6346E2ZX')}"
+        f"<b>GSTIN:</b> {c_details.get('gstin', '19AAPCR6346E2ZX')}<br/>"
+        f"<b>CIN:</b> {c_details.get('cin', 'U43219WR2026PTC292640')}"
         f"</font>"
     )
 
@@ -444,12 +463,12 @@ def generate_pdf(output_path, data):
     gst_rate_summary = {}
 
     for idx, item in enumerate(items):
-        item_qty = float(item.get('quantity', 0))
-        item_rate = float(item.get('rate', 0))
+        item_qty = safe_float(item.get('quantity'), 0.0)
+        item_rate = safe_float(item.get('rate'), 0.0)
         item_taxable = item_qty * item_rate
         tot_taxable += item_taxable
 
-        tax_pct = float(item.get('tax', 0))
+        tax_pct = safe_float(item.get('tax'), 0.0)
         unit_str = str(item.get('unit') or item.get('per') or 'PCS').strip().upper()
         if unit_str == 'MTR2':
             unit_str = 'MTR²'
@@ -508,7 +527,7 @@ def generate_pdf(output_path, data):
         ])
 
     # Loading / Forwarding charges if any
-    loading_charge = float(data.get('charges', {}).get('loadingCharges', 0))
+    loading_charge = safe_float((data.get('charges') or {}).get('loadingCharges'), 0.0)
     if loading_charge > 0:
         items_table_data.append([
             "",

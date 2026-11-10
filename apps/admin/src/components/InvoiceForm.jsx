@@ -239,6 +239,10 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
   // Dynamic state-based GST detection: West Bengal vs Inter-State
   const intraState = isWestBengal(customerDetails.state, customerDetails.gstin);
 
+  // When converted to an original invoice, document acts as a TAX INVOICE
+  const effectiveIsProforma = isProforma && !conversionSuccess;
+  const currentDocNo = (conversionSuccess ? (conversionSuccess.invoiceNo || conversionSuccess.invoice?.invoice_no) : null) || generatedDocNo || invoiceDetails.invoiceNo;
+
   // Filter quotations by customer name, quotation number (offer_no), or phone
   const filteredQuotations = quotations.filter(q => {
     if (!quotationSearch.trim()) return true;
@@ -614,7 +618,7 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
 
   const handleConvertToOriginalInvoice = async () => {
     if (!createdDocId) return;
-    if (!window.confirm(`Turn Proforma Invoice ${generatedDocNo} into an official TAX INVOICE?`)) return;
+    if (!window.confirm(`Turn Proforma Invoice ${currentDocNo || generatedDocNo} into an official TAX INVOICE?`)) return;
     setConverting(true);
     setError(null);
     try {
@@ -626,10 +630,22 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
       const data = await parseJsonSafely(res);
       if (!res.ok) throw new Error(data.error || 'Failed to turn into Tax Invoice');
 
-      setConversionSuccess(data);
+      const invNo = data.invoiceNo || data.invoice?.invoice_no;
       const newPdf = data.pdfUrl?.startsWith('/pdfs/') ? `${API}${data.pdfUrl}` : data.pdfUrl;
+
+      setConversionSuccess(data);
       setSuccessUrl(newPdf);
-      setGeneratedDocNo(data.invoiceNo);
+      setGeneratedDocNo(invNo);
+
+      // Immediately update invoiceDetails state with the new Tax Invoice number & date
+      setInvoiceDetails(prev => ({
+        ...prev,
+        invoiceNo: invNo,
+        invoiceDate: new Date().toISOString().split('T')[0],
+        proformaInvoiceNo: undefined,
+        validUntil: undefined,
+      }));
+
       if (onGenerated) onGenerated(data);
     } catch (err) {
       setError(err.message);
@@ -646,14 +662,22 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
       const html2pdfModule = await import('html2pdf.js');
       const html2pdf = html2pdfModule.default || html2pdfModule;
       const element = livePreviewRef.current;
-      const docPrefix = isProforma && !conversionSuccess ? 'Proforma_Invoice' : 'Tax_Invoice';
-      const docNumber = (generatedDocNo || invoiceDetails.invoiceNo || 'REON').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const docPrefix = effectiveIsProforma ? 'Proforma_Invoice' : 'Tax_Invoice';
+      const docNumber = (currentDocNo || 'REON').replace(/[^a-zA-Z0-9_-]/g, '_');
 
       const opt = {
         margin: [6, 6, 6, 6],
         filename: `${docPrefix}_${docNumber}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2.5, useCORS: true, logging: false, backgroundColor: '#ffffff' },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          scrollY: 0,
+          scrollX: 0,
+          backgroundColor: '#ffffff',
+          logging: false
+        },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
       };
 
@@ -674,7 +698,7 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
       window.print();
       return;
     }
-    const docTitle = `${isProforma && !conversionSuccess ? 'Proforma Invoice' : 'Tax Invoice'} - ${generatedDocNo || invoiceDetails.invoiceNo || 'REON'}`;
+    const docTitle = `${effectiveIsProforma ? 'Proforma Invoice' : 'Tax Invoice'} - ${currentDocNo || 'REON'}`;
     const previewHtml = livePreviewRef.current.outerHTML;
     printWindow.document.open();
     printWindow.document.write(`
@@ -1193,7 +1217,7 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-              <SectionHead title={`${isProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'} LIVE PREVIEW`} />
+              <SectionHead title={`${effectiveIsProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'} LIVE PREVIEW`} />
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <button
                   type="button"
@@ -1235,7 +1259,7 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
               {/* Header: Logo + Company Info on Left, Document Title & Meta on Right */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: `2px solid ${C.navy}`, paddingBottom: 16, marginBottom: 16 }}>
                 <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-                  <img src="/reon_logo.png" alt="REON ENERGIES" style={{ width: 105, height: 'auto', maxHeight: 50, objectFit: 'contain' }} />
+                  <img src="/reon_logo.png" alt="REON ENERGIES" crossOrigin="anonymous" style={{ width: 105, height: 'auto', maxHeight: 50, objectFit: 'contain' }} />
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 800, color: C.navy }}>REON ENERGIES PRIVATE LIMITED</div>
                     <div style={{ fontSize: 10.5, color: '#4B5563', lineHeight: 1.4 }}>
@@ -1248,16 +1272,19 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
 
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: 18, fontWeight: 900, color: C.navy, letterSpacing: '0.04em' }}>
-                    {isProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'}
+                    {effectiveIsProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'}
                   </div>
                   <div style={{ fontSize: 11, color: C.text, marginTop: 4, lineHeight: 1.5 }}>
-                    <b>{isProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'} No:</b> {invoiceDetails.invoiceNo}<br/>
-                    <b>Date:</b> {invoiceDetails.invoiceDate}<br/>
-                    {isProforma && invoiceDetails.validUntil && (
+                    <b>{effectiveIsProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'} No:</b> {currentDocNo}<br/>
+                    <b>{effectiveIsProforma ? 'Date' : 'Invoice Date'}:</b> {invoiceDetails.invoiceDate}<br/>
+                    {effectiveIsProforma && invoiceDetails.validUntil && (
                       <><b>Valid Until:</b> {invoiceDetails.validUntil}<br/></>
                     )}
                     {selectedQuotation?.offer_no && (
                       <><b>Quotation Ref:</b> {selectedQuotation.offer_no}<br/></>
+                    )}
+                    {!effectiveIsProforma && (conversionSuccess?.proformaInvoiceNo || editData?.proforma_invoice_no) && (
+                      <><b>Proforma Ref:</b> {conversionSuccess?.proformaInvoiceNo || editData?.proforma_invoice_no}<br/></>
                     )}
                   </div>
                 </div>
@@ -1470,7 +1497,7 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
               {/* Bank Details & Signature Section */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12, background: '#FAFAFA' }}>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                  <img src="/qr_reon.png" alt="REON UPI QR" style={{ width: 70, height: 70, objectFit: 'contain' }} />
+                  <img src="/qr_reon.png" alt="REON UPI QR" crossOrigin="anonymous" style={{ width: 70, height: 70, objectFit: 'contain' }} />
                   <div style={{ fontSize: 10.5, lineHeight: 1.4, color: C.text }}>
                     <b>Company Bank Details:</b><br/>
                     A/c Name: <b>REON ENERGIES PRIVATE LIMITED</b><br/>
@@ -1483,7 +1510,7 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
                 <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'flex-end' }}>
                   <div style={{ fontSize: 11, color: C.navy, fontWeight: 700 }}>For REON ENERGIES PRIVATE LIMITED</div>
                   {signatureUrl ? (
-                    <img src={signatureUrl} alt="Signature" style={{ maxHeight: 38, margin: '6px 0' }} />
+                    <img src={signatureUrl} alt="Signature" crossOrigin="anonymous" style={{ maxHeight: 38, margin: '6px 0' }} />
                   ) : (
                     <div style={{ height: 38 }} />
                   )}
@@ -1503,7 +1530,7 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
     <div style={{ fontFamily: 'system-ui, sans-serif', color: C.text, maxWidth: 900, margin: '0 auto' }}>
       {/* Top Banner */}
       <div style={{
-        background: isProforma ? '#0369A1' : C.navy,
+        background: effectiveIsProforma ? '#0369A1' : C.navy,
         borderRadius: 10, padding: '14px 20px', marginBottom: 24,
         display: 'flex', alignItems: 'center', gap: 12
       }}>
@@ -1512,11 +1539,11 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ color: 'white', fontWeight: 800, fontSize: 17, letterSpacing: '0.05em' }}>
-            {isProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'}
+            {effectiveIsProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'}
             {editData && <span style={{ fontSize: 12, fontWeight: 500, marginLeft: 10, opacity: 0.85 }}>(EDIT MODE)</span>}
           </div>
           <div style={{ color: '#E0F2FE', fontSize: 11, marginTop: 2 }}>
-            {isProforma
+            {effectiveIsProforma
               ? 'Bank submission · Advance payment clearance · Single-click conversion to TAX INVOICE'
               : 'GST Compliant · Linked POS Conversion · Standard Accounting ReportLab PDF'}
           </div>
@@ -1544,17 +1571,17 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
       {successUrl && (
         <div style={{ marginTop: 16, padding: 18, background: '#EFF6FF', border: '1.5px solid #3B82F6', borderRadius: 10 }}>
           <div style={{ color: '#1E3A8A', fontWeight: 800, fontSize: 14, marginBottom: 8 }}>
-            🎉 {conversionSuccess ? 'TAX INVOICE' : (isProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE')} Generated Successfully!
+            🎉 {conversionSuccess ? 'TAX INVOICE' : (effectiveIsProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE')} Generated Successfully!
           </div>
           {conversionSuccess && (
             <div style={{ color: '#065F46', fontSize: 12.5, fontWeight: 600, marginBottom: 10, background: '#D1FAE5', padding: '8px 12px', borderRadius: 6 }}>
-              ✅ Successfully turned into TAX INVOICE: <strong>{conversionSuccess.invoiceNo}</strong>. Originating Quotation & Lead marked as Converted!
+              ✅ Successfully converted to original TAX INVOICE: <strong>{currentDocNo}</strong>. Originating Quotation & Lead marked as Converted!
             </div>
           )}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
             <button
               onClick={() => {
-                const pdfName = (generatedDocNo || 'Invoice').replace(/\//g, '_') + '.pdf';
+                const pdfName = (currentDocNo || (effectiveIsProforma ? 'Proforma_Invoice' : 'Tax_Invoice')).replace(/\//g, '_') + '.pdf';
                 const bustCacheUrl = `${successUrl}${successUrl.includes('?') ? '&' : '?'}regen=true&v=${Date.now()}`;
                 downloadPdfFile(bustCacheUrl, pdfName);
               }}
@@ -1564,7 +1591,7 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
                 border: 'none', cursor: 'pointer', fontSize: 13
               }}
             >
-              ⬇ Download Official PDF ({generatedDocNo})
+              ⬇ Download Official PDF ({currentDocNo})
             </button>
 
             <button
@@ -1591,7 +1618,7 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
             </button>
 
             {/* Turn into Original Tax Invoice CTA */}
-            {isProforma && !conversionSuccess && createdDocId && (
+            {effectiveIsProforma && createdDocId && (
               <button
                 onClick={handleConvertToOriginalInvoice}
                 disabled={converting}
@@ -1638,13 +1665,13 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
             disabled={loading || !isValid()}
             style={{
               padding: '10px 26px', borderRadius: 7,
-              background: loading ? '#94A3B8' : (isProforma ? '#0284C7' : C.navy),
+              background: loading ? '#94A3B8' : (effectiveIsProforma ? '#0284C7' : C.navy),
               color: 'white', border: 'none',
               cursor: loading ? 'wait' : 'pointer', fontSize: 13.5, fontWeight: 800,
               boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
             }}
           >
-            {loading ? '⏳ Processing…' : (editData ? `💾 Save Changes to ${isProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'}` : `📄 Generate ${isProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'} PDF`)}
+            {loading ? '⏳ Processing…' : (editData ? `💾 Save Changes to ${effectiveIsProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'}` : `📄 Generate ${effectiveIsProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'} PDF`)}
           </button>
         )}
       </div>

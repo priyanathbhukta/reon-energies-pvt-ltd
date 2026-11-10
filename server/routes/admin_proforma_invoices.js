@@ -443,12 +443,14 @@ router.post('/:id/generate-invoice', async (req, res) => {
 
     // Prepare Original Invoice Details
     invoiceDetails.invoiceNo = invoiceNo;
+    delete invoiceDetails.proformaInvoiceNo;
     invoiceDetails.invoiceDate = new Date().toISOString().split('T')[0];
     invoiceDetails.dueDate = new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0];
 
     const taxInfo = calculateTaxes(customerDetails, items, charges);
     const pdfData = {
       isProforma: false,
+      is_proforma: false,
       documentType: 'TAX INVOICE',
       companyDetails,
       customerDetails,
@@ -506,7 +508,7 @@ router.post('/:id/generate-invoice', async (req, res) => {
       JSON.stringify(shipToDetails),
       pi.same_as_bill_to !== false,
       JSON.stringify(invoiceDetails),
-      JSON.stringify(items),
+      JSON.stringify(taxInfo.items),
       taxInfo.subtotal,
       taxInfo.cgstTotal,
       taxInfo.sgstTotal,
@@ -575,6 +577,7 @@ router.post('/:id/generate-invoice', async (req, res) => {
       success: true,
       message: `Original Tax Invoice ${createdInvoice.invoice_no} generated successfully from Proforma ${pi.proforma_invoice_no}`,
       invoice: createdInvoice,
+      invoiceNo: createdInvoice.invoice_no,
       proformaInvoiceNo: pi.proforma_invoice_no,
       pdfUrl,
     });
