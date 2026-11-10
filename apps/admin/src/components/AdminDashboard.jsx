@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect, Component } from 'react'
 import { useRouter } from 'next/navigation'
 
 const API = typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000') : ''
@@ -57,6 +57,39 @@ const NAV_GROUPS = [
 ];
 
 const TABS = NAV_GROUPS.flatMap(g => g.tabs);
+
+class TabErrorBoundary extends Component {
+    constructor(props) {
+        super(props)
+        this.state = { hasError: false, error: null }
+    }
+    static getDerivedStateFromError(error) {
+        return { hasError: true, error }
+    }
+    componentDidCatch(error, errorInfo) {
+        console.error("Tab render error:", error, errorInfo)
+    }
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div className="p-8 bg-white border border-red-200 rounded-2xl text-center shadow-xs">
+                    <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <X className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-base font-bold text-navy mb-1">Section failed to load</h3>
+                    <p className="text-xs text-red-600 mb-4 max-w-md mx-auto">{this.state.error?.message || 'An unexpected error occurred while rendering this section.'}</p>
+                    <button
+                        onClick={() => this.setState({ hasError: false, error: null })}
+                        className="px-4 py-2 bg-navy text-white text-xs font-bold rounded-xl hover:bg-navy/90 transition shadow-xs"
+                    >
+                        Retry Loading
+                    </button>
+                </div>
+            )
+        }
+        return this.props.children
+    }
+}
 
 export default function AdminDashboard() {
     const router = useRouter()
@@ -357,30 +390,32 @@ export default function AdminDashboard() {
 
                     {/* Tab Content */}
                     <div className="w-full max-w-[1440px] mx-auto">
-                        {activeTab === 'enquiries' && <EnquiriesTab {...{ filtered, filter, setFilter, searchTerm, setSearchTerm, expandedRow, setExpandedRow, updateStatus, deleteEnquiry, formatDate, formatCurrency, enqFromDate, setEnqFromDate, enqToDate, setEnqToDate, enqSearchHistory, setEnqSearchHistory, addToEnqHistory }} />}
-                        {activeTab === 'pos_partners' && <PosPartnersTab partners={posPartners} onRefresh={fetchAll} headers={headers} formatDate={formatDate} />}
-                        {activeTab === 'leads' && (
-                            <LeadsTab
-                                leads={leads}
-                                posPartners={posPartners}
-                                onRefresh={fetchAll}
-                                headers={headers}
-                                formatDate={formatDate}
-                                onSelectQuotationForInvoice={(quote) => {
-                                    setPreselectedQuotation(quote);
-                                    setActiveTab('invoice');
-                                }}
-                            />
-                        )}
-                        {activeTab === 'projects' && <ProjectsTab />}
-                        {activeTab === 'schemes' && <SchemesTab schemes={schemes} onEdit={(s) => setEditModal({ type: 'schemes', data: s, isNew: false })} onAdd={() => setEditModal({ type: 'schemes', data: { icon: '☀️', badge: '', name: '', tagline: '', eligibility: [''], subsidy_breakdown: [{ label: '', value: '' }], reon_help: [''], total_subsidy: '', accent: 'from-emerald-700 to-emerald-600', featured: false, sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('schemes', id)} />}
-                        {activeTab === 'testimonials' && <TestimonialsTab testimonials={testimonials} onEdit={(t) => setEditModal({ type: 'testimonials', data: t, isNew: false })} onAdd={() => setEditModal({ type: 'testimonials', data: { name: '', role: '', rating: 5, review: '', avatar_initials: '', avatar_color: 'bg-emerald', date_label: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('testimonials', id)} />}
-                        {activeTab === 'gallery' && <GalleryTab gallery={gallery} onEdit={(g) => setEditModal({ type: 'gallery', data: g, isNew: false })} onAdd={() => setEditModal({ type: 'gallery', data: { image_url: '', alt_text: '', label: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('gallery', id)} />}
-                        {activeTab === 'directors' && <DirectorsTab directors={directors} onEdit={(d) => setEditModal({ type: 'directors', data: d, isNew: false })} onAdd={() => setEditModal({ type: 'directors', data: { name: '', role: '', description: '', image_url: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('directors', id)} />}
-                        {activeTab === 'quotation' && <QuotationTab editData={editQuotationData} onClearEdit={() => setEditQuotationData(null)} />}
-                        {activeTab === 'proforma_invoice' && <ProformaInvoiceTab onNavigateToInvoice={() => setActiveTab('invoice')} />}
-                        {activeTab === 'invoice' && <InvoiceTab editData={editInvoiceData} onClearEdit={() => setEditInvoiceData(null)} preselectedQuotation={preselectedQuotation} onOpenProformaList={() => setActiveTab('proforma_invoice')} />}
-                        {activeTab === 'documents' && <GeneratedDocumentsTab onEditInvoice={(data) => { setEditInvoiceData(data); setActiveTab('invoice'); }} onEditQuotation={(data) => { setEditQuotationData(data); setActiveTab('quotation'); }} />}
+                        <TabErrorBoundary key={activeTab}>
+                            {activeTab === 'enquiries' && <EnquiriesTab {...{ filtered, filter, setFilter, searchTerm, setSearchTerm, expandedRow, setExpandedRow, updateStatus, deleteEnquiry, formatDate, formatCurrency, enqFromDate, setEnqFromDate, enqToDate, setEnqToDate, enqSearchHistory, setEnqSearchHistory, addToEnqHistory }} />}
+                            {activeTab === 'pos_partners' && <PosPartnersTab partners={posPartners} onRefresh={fetchAll} headers={headers} formatDate={formatDate} />}
+                            {activeTab === 'leads' && (
+                                <LeadsTab
+                                    leads={leads}
+                                    posPartners={posPartners}
+                                    onRefresh={fetchAll}
+                                    headers={headers}
+                                    formatDate={formatDate}
+                                    onSelectQuotationForInvoice={(quote) => {
+                                        setPreselectedQuotation(quote);
+                                        setActiveTab('invoice');
+                                    }}
+                                />
+                            )}
+                            {activeTab === 'projects' && <ProjectsTab />}
+                            {activeTab === 'schemes' && <SchemesTab schemes={schemes} onEdit={(s) => setEditModal({ type: 'schemes', data: s, isNew: false })} onAdd={() => setEditModal({ type: 'schemes', data: { icon: '☀️', badge: '', name: '', tagline: '', eligibility: [''], subsidy_breakdown: [{ label: '', value: '' }], reon_help: [''], total_subsidy: '', accent: 'from-emerald-700 to-emerald-600', featured: false, sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('schemes', id)} />}
+                            {activeTab === 'testimonials' && <TestimonialsTab testimonials={testimonials} onEdit={(t) => setEditModal({ type: 'testimonials', data: t, isNew: false })} onAdd={() => setEditModal({ type: 'testimonials', data: { name: '', role: '', rating: 5, review: '', avatar_initials: '', avatar_color: 'bg-emerald', date_label: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('testimonials', id)} />}
+                            {activeTab === 'gallery' && <GalleryTab gallery={gallery} onEdit={(g) => setEditModal({ type: 'gallery', data: g, isNew: false })} onAdd={() => setEditModal({ type: 'gallery', data: { image_url: '', alt_text: '', label: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('gallery', id)} />}
+                            {activeTab === 'directors' && <DirectorsTab directors={directors} onEdit={(d) => setEditModal({ type: 'directors', data: d, isNew: false })} onAdd={() => setEditModal({ type: 'directors', data: { name: '', role: '', description: '', image_url: '', sort_order: 0 }, isNew: true })} onDelete={(id) => deleteContent('directors', id)} />}
+                            {activeTab === 'quotation' && <QuotationTab editData={editQuotationData} onClearEdit={() => setEditQuotationData(null)} />}
+                            {activeTab === 'proforma_invoice' && <ProformaInvoiceTab onNavigateToInvoice={() => setActiveTab('invoice')} />}
+                            {activeTab === 'invoice' && <InvoiceTab editData={editInvoiceData} onClearEdit={() => setEditInvoiceData(null)} preselectedQuotation={preselectedQuotation} onOpenProformaList={() => setActiveTab('proforma_invoice')} />}
+                            {activeTab === 'documents' && <GeneratedDocumentsTab onEditInvoice={(data) => { setEditInvoiceData(data); setActiveTab('invoice'); }} onEditQuotation={(data) => { setEditQuotationData(data); setActiveTab('quotation'); }} />}
+                        </TabErrorBoundary>
                     </div>
                 </main>
             </div>

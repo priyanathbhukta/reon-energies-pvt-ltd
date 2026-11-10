@@ -57,9 +57,18 @@ export default function GeneratedDocumentsTab({ onEditInvoice, onEditQuotation }
   const [otpInput, setOtpInput] = useState('');
 
   // Role-Based Access Control (RBAC): Invoices editable by active profile 'admin' only
-  const adminUser = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('reon_admin_user') || '{}') : {};
+  let adminUser = {};
+  if (typeof window !== 'undefined') {
+    try {
+      adminUser = JSON.parse(localStorage.getItem('reon_admin_user') || '{}');
+    } catch (_) {}
+  }
   const isAdmin = adminUser?.role === 'admin' || !!adminUser?.username;
-  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  const token = typeof window !== 'undefined' ? localStorage.getItem('reon_admin_token') : null;
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {})
+  };
 
   const fetchAllDocuments = async () => {
     setLoading(true);
