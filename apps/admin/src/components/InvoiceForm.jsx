@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { API, parseJsonSafely } from '@/lib/legacy-api';
 import { downloadPdfFile } from '@/lib/download';
+import { Search, X, CheckCircle, FileText } from 'lucide-react';
 
 /* ── Colour tokens matching the REON brand ──────────────────────────────── */
 const C = {
@@ -232,10 +233,21 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
   const [charges, setCharges] = useState({ loadingCharges: 0 });
   const [quotations, setQuotations] = useState([]);
   const [selectedQuotation, setSelectedQuotation] = useState(null);
+  const [quotationSearch, setQuotationSearch] = useState('');
   const [loadingQuotes, setLoadingQuotes] = useState(false);
 
   // Dynamic state-based GST detection: West Bengal vs Inter-State
   const intraState = isWestBengal(customerDetails.state, customerDetails.gstin);
+
+  // Filter quotations by customer name, quotation number (offer_no), or phone
+  const filteredQuotations = quotations.filter(q => {
+    if (!quotationSearch.trim()) return true;
+    const term = quotationSearch.toLowerCase().trim();
+    const offerNo = (q.offer_no || '').toLowerCase();
+    const custName = (q.customer_name || '').toLowerCase();
+    const phone = (q.customer_phone || q.contact_number || q.phone || '').toLowerCase();
+    return offerNo.includes(term) || custName.includes(term) || phone.includes(term);
+  });
 
   // Load existing signature if available
   useEffect(() => {
@@ -716,46 +728,199 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
     switch (step) {
       case 0: return (
         <>
-          {/* Quotation Link Picker */}
+          {/* Quotation Link Picker with Live Search */}
           <div style={{ background: '#F0F9FF', border: '1.5px solid #BAE6FD', borderRadius: 10, padding: 14, marginBottom: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#0369A1' }}>
-                {isProforma ? '⚡ Populate from Quotation' : '⚡ Automatic Lead Conversion Link'}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, color: '#0369A1' }}>
+                <FileText size={16} />
+                <span>{isProforma ? '⚡ Populate from Quotation' : '⚡ Populate from Quotation & Lead Conversion Link'}</span>
               </div>
               {selectedQuotation && (
                 <button
                   type="button"
-                  onClick={() => setSelectedQuotation(null)}
-                  style={{ fontSize: 11, color: C.red, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+                  onClick={() => {
+                    setSelectedQuotation(null);
+                    setQuotationSearch('');
+                  }}
+                  style={{ fontSize: 11.5, color: C.red, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}
                 >
-                  Clear Selection
+                  <X size={13} />
+                  <span>Clear Selection</span>
                 </button>
               )}
             </div>
             <p style={{ fontSize: 11.5, color: '#0C4A6E', marginBottom: 10 }}>
               {isProforma
-                ? 'Select an approved quotation to automatically populate customer details, line items, and quantities.'
-                : 'Select a quotation to automatically link this invoice and mark the originating POS lead as Converted.'}
+                ? 'Search by customer name or quotation number to automatically populate customer details, line items, and quantities.'
+                : 'Search by customer name or quotation number to automatically link this invoice and mark the originating POS lead as Converted.'}
             </p>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <select
-                style={{ flex: 1, padding: '8px 12px', borderRadius: 7, border: '1px solid #7DD3FC', fontSize: 13, background: 'white', color: C.text }}
-                value={selectedQuotation?.id || ''}
-                onChange={(e) => {
-                  const q = quotations.find(item => String(item.id) === e.target.value);
-                  if (q) populateFromQuotation(q);
-                }}
-              >
-                <option value="">-- Choose an approved quotation --</option>
-                {quotations.map(q => {
-                  const isConverted = q.status === 'converted' || q.lead_status === 'Converted' || !!q.invoice_no;
-                  return (
-                    <option key={q.id} value={q.id}>
-                      {q.offer_no} — {q.customer_name} ({fmtRs(q.total_price || 0)}) {isConverted ? ' [Converted]' : ' [Pending]'}
-                    </option>
-                  );
-                })}
-              </select>
+
+            {/* Selected Quotation Card */}
+            {selectedQuotation && (
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
+                background: 'white', border: '1.5px solid #0284C7', borderRadius: 8,
+                padding: '9px 12px', marginBottom: 12
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <CheckCircle size={18} color="#0284C7" />
+                  <div>
+                    <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy }}>
+                      {selectedQuotation.offer_no} — {selectedQuotation.customer_name}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748B' }}>
+                      Quotation Value: <strong style={{ color: C.navy }}>{fmtRs(selectedQuotation.total_price || 0)}</strong>
+                      {selectedQuotation.status === 'converted' && (
+                        <span style={{ marginLeft: 8, color: '#059669', fontWeight: 700 }}>[Converted]</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedQuotation(null);
+                    setQuotationSearch('');
+                  }}
+                  style={{
+                    padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700,
+                    background: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1', cursor: 'pointer'
+                  }}
+                >
+                  Change Quotation
+                </button>
+              </div>
+            )}
+
+            {/* Search Bar + Select Dropdown */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {/* Search Bar Input */}
+              <div style={{ position: 'relative', width: '100%' }}>
+                <div style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#0284C7', pointerEvents: 'none', display: 'flex', alignItems: 'center' }}>
+                  <Search size={15} />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search quotation by customer name or quotation number (e.g. Soumen, Q-2026, 854)..."
+                  value={quotationSearch}
+                  onChange={(e) => setQuotationSearch(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 30px 8px 32px',
+                    borderRadius: 7,
+                    border: '1.5px solid #7DD3FC',
+                    fontSize: 12.5,
+                    background: 'white',
+                    color: C.text,
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+                {quotationSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setQuotationSearch('')}
+                    style={{
+                      position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                      background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', padding: 2
+                    }}
+                    title="Clear search"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
+              {/* Matching Quotations Dropdown */}
+              <div style={{ display: 'flex', gap: 10 }}>
+                <select
+                  style={{
+                    flex: 1, padding: '8px 12px', borderRadius: 7, border: '1px solid #7DD3FC',
+                    fontSize: 12.5, background: 'white', color: C.text, outline: 'none'
+                  }}
+                  value={selectedQuotation?.id || ''}
+                  onChange={(e) => {
+                    const q = quotations.find(item => String(item.id) === e.target.value);
+                    if (q) {
+                      populateFromQuotation(q);
+                      setQuotationSearch('');
+                    }
+                  }}
+                >
+                  <option value="">
+                    {loadingQuotes
+                      ? 'Loading quotations...'
+                      : quotationSearch
+                        ? `-- ${filteredQuotations.length} matching quotation(s) for "${quotationSearch}" --`
+                        : `-- Choose an approved quotation (${quotations.length} available) --`}
+                  </option>
+                  {filteredQuotations.map(q => {
+                    const isConverted = q.status === 'converted' || q.lead_status === 'Converted' || !!q.invoice_no;
+                    return (
+                      <option key={q.id} value={q.id}>
+                        {q.offer_no} — {q.customer_name} ({fmtRs(q.total_price || 0)}) {isConverted ? ' [Converted]' : ' [Pending]'}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* Instant Search Results Dropdown List when user is typing */}
+              {quotationSearch.trim().length > 0 && (
+                <div style={{
+                  background: 'white', border: '1px solid #BAE6FD', borderRadius: 8,
+                  maxHeight: 180, overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+                }}>
+                  {filteredQuotations.length === 0 ? (
+                    <div style={{ padding: '12px 14px', fontSize: 12, color: '#64748B', textAlign: 'center' }}>
+                      No quotations found matching &ldquo;<strong>{quotationSearch}</strong>&rdquo;
+                    </div>
+                  ) : (
+                    filteredQuotations.map(q => {
+                      const isConverted = q.status === 'converted' || q.lead_status === 'Converted' || !!q.invoice_no;
+                      return (
+                        <div
+                          key={q.id}
+                          onClick={() => {
+                            populateFromQuotation(q);
+                            setQuotationSearch('');
+                          }}
+                          style={{
+                            padding: '8px 12px', borderBottom: '1px solid #F1F5F9', cursor: 'pointer',
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            transition: 'background 0.15s', fontSize: 12
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = '#F0F9FF'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+                        >
+                          <div>
+                            <strong style={{ color: C.navy }}>{q.offer_no}</strong>
+                            <span style={{ margin: '0 6px', color: '#94A3B8' }}>·</span>
+                            <span style={{ fontWeight: 600, color: C.text }}>{q.customer_name}</span>
+                            {(q.customer_phone || q.contact_number) && (
+                              <span style={{ fontSize: 11, color: '#64748B', marginLeft: 6 }}>
+                                ({q.customer_phone || q.contact_number})
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <span style={{ fontWeight: 700, color: '#0369A1' }}>{fmtRs(q.total_price || 0)}</span>
+                            <span style={{
+                              marginLeft: 8, fontSize: 10.5, padding: '2px 6px', borderRadius: 4,
+                              background: isConverted ? '#D1FAE5' : '#FEF3C7',
+                              color: isConverted ? '#065F46' : '#92400E',
+                              fontWeight: 700
+                            }}>
+                              {isConverted ? 'Converted' : 'Pending'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
