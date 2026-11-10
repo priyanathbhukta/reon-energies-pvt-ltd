@@ -444,12 +444,12 @@ def generate_pdf(output_path, data):
     header_row = [
         Paragraph("Sl. No.", styleTblHeader),
         Paragraph("Description", styleTblHeader),
-        Paragraph("HSN / SSN", styleTblHeader),
+        Paragraph("HSN / SAC", styleTblHeader),
         Paragraph("Qty", styleTblHeader),
         Paragraph("Per", styleTblHeader),
         Paragraph("Rate", styleTblHeader),
         Paragraph("GST", styleTblHeader),
-        Paragraph("Invoice Value", styleTblHeader),
+        Paragraph("Taxable Value", styleTblHeader),
     ]
     items_table_data = [header_row]
 
@@ -576,7 +576,7 @@ def generate_pdf(output_path, data):
     # GST Summary Table:
     gst_summary_data = [
         [
-            Paragraph("<b>GST Component</b>", styleBold),
+            Paragraph("<b>GST Particulars</b>", styleBold),
             Paragraph("<b>Rate</b>", ParagraphStyle('H1', parent=styleBold, alignment=TA_CENTER)),
             Paragraph("<b>Amount</b>", ParagraphStyle('H2', parent=styleBold, alignment=TA_RIGHT)),
         ]
@@ -627,16 +627,16 @@ def generate_pdf(output_path, data):
     # Financial Summary Table
     grand_total = round(tot_taxable + total_tax_amt + loading_charge)
     fin_summary_data = [
-        ["Subtotal", format_inr(tot_taxable)],
-        ["Discount", format_inr(0)],
-        ["Taxable Value", format_inr(tot_taxable)],
+        ["Basic Value", format_inr(tot_taxable)],
+        ["(-)Discount", format_inr(0)],
+        ["Net Taxable Value", format_inr(tot_taxable)],
     ]
     if intra_state:
-        fin_summary_data.append(["CGST", format_inr(tot_cgst)])
-        fin_summary_data.append(["SGST", format_inr(tot_sgst)])
+        fin_summary_data.append(["Add: CGST", format_inr(tot_cgst)])
+        fin_summary_data.append(["Add: SGST", format_inr(tot_sgst)])
         fin_summary_data.append(["IGST (0%)", format_inr(0)])
     else:
-        fin_summary_data.append(["IGST", format_inr(tot_igst)])
+        fin_summary_data.append(["Add: IGST", format_inr(tot_igst)])
         fin_summary_data.append(["CGST (0%)", format_inr(0)])
         fin_summary_data.append(["SGST (0%)", format_inr(0)])
 
@@ -644,7 +644,7 @@ def generate_pdf(output_path, data):
         fin_summary_data.append(["Loading / Forwarding", format_inr(loading_charge)])
 
     fin_summary_data.append([
-        Paragraph("<b>Grand Total</b>", ParagraphStyle('GT', parent=styleBold, fontSize=9.5, textColor=colors.HexColor("#1B2D5B"))),
+        Paragraph("<b>Total Invoice Value</b>", ParagraphStyle('GT', parent=styleBold, fontSize=9.5, textColor=colors.HexColor("#1B2D5B"))),
         Paragraph(f"<b>{format_inr(grand_total)}</b>", ParagraphStyle('GTR', parent=styleBold, fontSize=9.5, alignment=TA_RIGHT, textColor=colors.HexColor("#1B2D5B")))
     ])
 
@@ -666,7 +666,7 @@ def generate_pdf(output_path, data):
     combined_summary_table = Table(
         [[
             Table([[Paragraph("<b>GST SUMMARY</b>", styleBold)], [t_gst_summary]], colWidths=[275]),
-            Table([[Paragraph("<b>FINANCIAL SUMMARY</b>", styleBold)], [t_fin_summary]], colWidths=[250])
+            Table([[Paragraph("<b>INVOICE SUMMARY</b>", styleBold)], [t_fin_summary]], colWidths=[250])
         ]],
         colWidths=[280, 255]
     )
