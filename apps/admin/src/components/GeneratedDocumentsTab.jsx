@@ -4,9 +4,10 @@ import { downloadPdfFile } from '@/lib/download';
 import {
   FileText, Search, RefreshCw, FileDown, Trash2, Edit2,
   CheckCircle2, Clock, AlertTriangle, X, Plus, ChevronRight,
-  CreditCard, ArrowUpRight, DollarSign, RotateCcw, AlertCircle
+  CreditCard, ArrowUpRight, DollarSign, RotateCcw, AlertCircle, Eye
 } from 'lucide-react';
 import { fmt, fmtRs } from './InvoiceForm';
+import InvoicePreviewModal from './InvoicePreviewModal';
 
 export default function GeneratedDocumentsTab({ onEditInvoice, onEditQuotation }) {
   const [activeSubTab, setActiveSubTab] = useState('invoices'); // 'invoices' | 'quotations'
@@ -21,6 +22,9 @@ export default function GeneratedDocumentsTab({ onEditInvoice, onEditQuotation }
   const [paymentFilter, setPaymentFilter] = useState('all'); // 'all' | 'unpaid' | 'partially_paid' | 'paid' | 'overpaid'
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+
+  // Invoice Preview Modal State
+  const [previewInvoice, setPreviewInvoice] = useState(null);
 
   // Customer Payment Management Modal state
   const [selectedInvoice, setSelectedInvoice] = useState(null); // when open, displays customer-wise payment sheet
@@ -548,6 +552,14 @@ export default function GeneratedDocumentsTab({ onEditInvoice, onEditQuotation }
                         {/* Actions */}
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setPreviewInvoice(inv)}
+                              className="p-1.5 text-navy hover:bg-navy/10 rounded-lg transition cursor-pointer"
+                              title="Preview Invoice (Downloadable)"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
                             {pdfFullUrl && (
                               <button
                                 type="button"
@@ -746,12 +758,37 @@ export default function GeneratedDocumentsTab({ onEditInvoice, onEditQuotation }
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => setSelectedInvoice(null)}
-                className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPreviewInvoice(selectedInvoice)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-navy text-white rounded-lg text-xs font-bold hover:bg-navy/90 transition shadow-xs cursor-pointer"
+                  title="View Live Invoice Preview"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Preview Invoice</span>
+                </button>
+                {selectedInvoice.pdf_url && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const u = selectedInvoice.pdf_url.startsWith('/pdfs/') ? `${API}${selectedInvoice.pdf_url}` : selectedInvoice.pdf_url;
+                      downloadPdfFile(u, `${selectedInvoice.invoice_no?.replace(/\//g, '_') || 'Invoice'}.pdf`);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition shadow-xs cursor-pointer"
+                    title="Download Invoice PDF"
+                  >
+                    <FileDown className="w-3.5 h-3.5" />
+                    <span>Download PDF</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setSelectedInvoice(null)}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Fast Quotation Lookup Search within Customer Sheet */}
@@ -1168,7 +1205,7 @@ export default function GeneratedDocumentsTab({ onEditInvoice, onEditQuotation }
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 animate-fade-in">
             <h3 className="text-lg font-bold text-navy mb-2">Delete {otpModal.doc?.type}</h3>
             <p className="text-sm text-gray-500 mb-4">
-              An OTP has been sent to <b>support@reonenergy.in</b>. Please enter it below to confirm deletion of{' '}
+              An OTP has been sent to <b>reonenergiespvtltd@gmail.com</b>. Please enter it below to confirm deletion of{' '}
               <b className="text-navy">{otpModal.doc?.docNo}</b>.
             </p>
             <input
@@ -1198,6 +1235,13 @@ export default function GeneratedDocumentsTab({ onEditInvoice, onEditQuotation }
           </div>
         </div>
       )}
+
+      {/* Invoice Live Preview Modal (Downloadable) */}
+      <InvoicePreviewModal
+        isOpen={Boolean(previewInvoice)}
+        invoice={previewInvoice}
+        onClose={() => setPreviewInvoice(null)}
+      />
     </div>
   );
 }

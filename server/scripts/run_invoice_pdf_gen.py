@@ -300,10 +300,16 @@ def generate_pdf(output_path, data):
     
     c_details = data.get('companyDetails', {})
     cust_details = data.get('customerDetails', {})
-    ship_details = data.get('shipToDetails') or {}
-    same_as_bill_to = data.get('sameAsBillTo', True)
-    if same_as_bill_to or not ship_details:
+    raw_same = data.get('sameAsBillTo')
+    if raw_same is False or str(raw_same).lower() == 'false':
+        same_as_bill_to = False
+    else:
+        same_as_bill_to = True
+
+    if same_as_bill_to:
         ship_details = cust_details
+    else:
+        ship_details = data.get('shipToDetails') or {}
 
     i_details = data.get('invoiceDetails', {})
     
@@ -389,7 +395,7 @@ def generate_pdf(output_path, data):
     story.append(Spacer(1, 10))
 
     # ── 2. BILL TO | SHIP TO (Without 'Same as Bill To' text) ────────────────
-    ship_name = ship_details.get('companyName') or ship_details.get('name', '') or cust_details.get('name', '')
+    ship_name = ship_details.get('companyName') or ship_details.get('name', '') or (cust_details.get('name', '') if same_as_bill_to else '')
     recipient = ship_details.get('recipientName', '')
     ship_lines = [f"<b>{ship_name}</b>"]
     if recipient and recipient != ship_name:
@@ -400,15 +406,28 @@ def generate_pdf(output_path, data):
         ship_lines.append(f"<b>Phone:</b> {ship_details.get('phone')}")
     if ship_details.get('email'):
         ship_lines.append(f"<b>Email:</b> {ship_details.get('email')}")
-    if ship_details.get('gstin'):
-        ship_lines.append(f"<b>GSTIN:</b> {ship_details.get('gstin')}")
-    ship_state_str = ship_details.get('state', '')
-    if ship_details.get('pincode'):
-        ship_state_str = f"{ship_state_str} - {ship_details.get('pincode')}" if ship_state_str else ship_details.get('pincode')
+
+    # GSTIN rule: Bill To GST no must NOT be visible in Ship To unless sameAsBillTo is True!
+    if same_as_bill_to:
+        if cust_details.get('gstin'):
+            ship_lines.append(f"<b>GSTIN:</b> {cust_details.get('gstin')}")
+    else:
+        ship_gstin = ship_details.get('gstin')
+        if ship_gstin and str(ship_gstin).strip():
+            ship_lines.append(f"<b>GSTIN:</b> {str(ship_gstin).strip()}")
+
+    ship_state_str = ship_details.get('state', '') if not same_as_bill_to else cust_details.get('state', '')
+    ship_pin = (ship_details.get('pinCode') or ship_details.get('pincode')) if not same_as_bill_to else (cust_details.get('pinCode') or cust_details.get('pincode'))
+    if ship_pin:
+        ship_state_str = f"{ship_state_str} - {ship_pin}" if ship_state_str else str(ship_pin)
     if ship_state_str:
         ship_lines.append(f"<b>State:</b> {ship_state_str}")
 
     cust_gstin_line = f"<b>GSTIN:</b> {cust_details.get('gstin')}<br/>" if cust_details.get('gstin') else ""
+    cust_pin = cust_details.get('pinCode') or cust_details.get('pincode')
+    cust_state_str = cust_details.get('state', '')
+    if cust_pin:
+        cust_state_str = f"{cust_state_str} - {cust_pin}" if cust_state_str else str(cust_pin)
 
     address_table_data = [
         [
@@ -421,7 +440,7 @@ def generate_pdf(output_path, data):
                       f"<b>Phone:</b> {cust_details.get('phone', '')}<br/>"
                       f"<b>Email:</b> {cust_details.get('email', '')}<br/>"
                       f"{cust_gstin_line}"
-                      f"<b>State:</b> {cust_details.get('state', '')}", styleN),
+                      f"<b>State:</b> {cust_state_str}", styleN),
             Paragraph("<br/>".join(ship_lines), styleN)
         ]
     ]
