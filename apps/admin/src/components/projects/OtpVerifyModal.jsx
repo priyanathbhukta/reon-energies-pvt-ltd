@@ -56,7 +56,7 @@ export default function OtpVerifyModal({ isOpen, onClose, onVerified, actionText
         </div>
         <div className="p-5">
           <p className="text-sm text-gray-500 mb-4 text-center">
-            An OTP has been sent to <b>support@reonenergy.in</b>. Please enter it below to confirm {actionText} 
+            An OTP has been sent to <b>reonenergiespvtltd@gmail.com</b>. Please enter it below to confirm {actionText} 
             {itemRef && <span className="font-bold text-navy"> {itemRef}</span>}.
           </p>
           <input

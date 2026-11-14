@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { API, parseJsonSafely } from '@/lib/legacy-api';
 import { downloadPdfFile } from '@/lib/download';
-import { Search, X, CheckCircle, FileText } from 'lucide-react';
+import { Search, X, CheckCircle, FileText, FileDown, Printer } from 'lucide-react';
+import InvoicePreviewCard from './InvoicePreviewCard';
 
 /* ── Colour tokens matching the REON brand ──────────────────────────────── */
 const C = {
@@ -156,7 +157,7 @@ export function numToWordsINR(num) {
 
 /* ── Tiny reusable field component ──────────────────────────────────────── */
 function Field({ label, name, value, onChange, type = 'text', required = false,
-                 options, hint, half, readOnly, warn, list }) {
+                 options, hint, placeholder, half, readOnly, warn, list }) {
   const inputStyle = {
     width: '100%', padding: '9px 12px', border: `1.5px solid ${warn ? C.red : C.border}`,
     borderRadius: 7, fontSize: 13, outline: 'none', fontFamily: 'inherit',
@@ -175,7 +176,7 @@ function Field({ label, name, value, onChange, type = 'text', required = false,
           {options.map(o => <option key={o.value || o} value={o.value || o}>{o.label || o}</option>)}
         </select>
       ) : (
-        <input name={name} value={value} onChange={onChange} type={type} style={inputStyle} placeholder={hint || ''} readOnly={readOnly} list={list}
+        <input name={name} value={value} onChange={onChange} type={type} style={inputStyle} placeholder={placeholder || hint || ''} readOnly={readOnly} list={list}
                onFocus={e => { if (!readOnly) e.target.style.borderColor = C.teal; }}
                onBlur={e => e.target.style.borderColor = warn ? C.red : C.border} />
       )}
@@ -218,9 +219,8 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
   const [uploadingSig, setUploadingSig] = useState(false);
   const fileInputRef = useRef(null);
 
-  // Live Preview DOM Reference & Export States
+  // Live Preview DOM Reference
   const livePreviewRef = useRef(null);
-  const [exportingLivePdf, setExportingLivePdf] = useState(false);
 
   const [invoiceDetails, setInvoiceDetails] = useState({
     ...INIT_INVOICE_DETAILS,
@@ -440,8 +440,14 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
       try {
         setCompanyDetails(editData.company_details || INIT_COMPANY);
         setCustomerDetails(editData.customer_details || INIT_CUSTOMER);
-        setShipToDetails(editData.ship_to_details || editData.customer_details || INIT_SHIP_TO);
-        setSameAsBillTo(editData.same_as_bill_to !== false);
+        const isSame = editData.same_as_bill_to !== false;
+        setSameAsBillTo(isSame);
+        const loadedShip = editData.ship_to_details || (isSame ? editData.customer_details : INIT_SHIP_TO);
+        setShipToDetails({
+          ...INIT_SHIP_TO,
+          ...(loadedShip || {}),
+          gstin: isSame ? (editData.customer_details?.gstin || '') : (editData.ship_to_details?.gstin || ''),
+        });
         setInvoiceDetails({
           ...INIT_INVOICE_DETAILS,
           ...(editData.invoice_details || {}),
@@ -566,7 +572,12 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
       const payload = {
         companyDetails,
         customerDetails,
-        shipToDetails: sameAsBillTo ? customerDetails : shipToDetails,
+        shipToDetails: sameAsBillTo
+          ? { ...customerDetails }
+          : {
+              ...shipToDetails,
+              gstin: shipToDetails.gstin ? String(shipToDetails.gstin).trim() : '',
+            },
         sameAsBillTo,
         invoiceDetails,
         items: normalizedItems,
@@ -600,12 +611,19 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
       if (!response.ok) throw new Error(data.error || `Failed to ${editData ? 'update' : 'generate'} ${isProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'}`);
       
       if (data.success && data.pdfUrl) {
-        setSuccessUrl(data.pdfUrl.startsWith('/pdfs/') ? `${API}${data.pdfUrl}` : data.pdfUrl);
-        setGeneratedDocNo(data.proformaInvoiceNo || data.invoiceNo || invoiceDetails.invoiceNo);
+        const fullPdf = data.pdfUrl.startsWith('/pdfs/') ? `${API}${data.pdfUrl}` : data.pdfUrl;
+        setSuccessUrl(fullPdf);
+        const docNo = data.proformaInvoiceNo || data.invoiceNo || invoiceDetails.invoiceNo;
+        setGeneratedDocNo(docNo);
         const docId = data.proformaInvoice?.id || data.invoice?.id || data.id || editData?.id;
         if (docId) setCreatedDocId(docId);
         setConversionSuccess(null);
         if (onGenerated) onGenerated(data);
+
+        // Auto-download PDF matching live preview
+        const pdfName = (docNo || (effectiveIsProforma ? 'Proforma_Invoice' : 'Tax_Invoice')).replace(/\//g, '_') + '.pdf';
+        const bustCacheUrl = `${fullPdf}${fullPdf.includes('?') ? '&' : '?'}regen=true&v=${Date.now()}`;
+        downloadPdfFile(bustCacheUrl, pdfName);
       } else {
         throw new Error('No PDF URL returned from server');
       }
@@ -613,6 +631,16 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (successUrl) {
+      const pdfName = (currentDocNo || (effectiveIsProforma ? 'Proforma_Invoice' : 'Tax_Invoice')).replace(/\//g, '_') + '.pdf';
+      const bustCacheUrl = `${successUrl}${successUrl.includes('?') ? '&' : '?'}regen=true&v=${Date.now()}`;
+      downloadPdfFile(bustCacheUrl, pdfName);
+    } else {
+      await handleSubmit();
     }
   };
 
@@ -647,46 +675,15 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
       }));
 
       if (onGenerated) onGenerated(data);
+
+      // Auto-download new converted Tax Invoice PDF
+      const pdfName = (invNo || 'Tax_Invoice').replace(/\//g, '_') + '.pdf';
+      const bustCacheUrl = `${newPdf}${newPdf.includes('?') ? '&' : '?'}regen=true&v=${Date.now()}`;
+      downloadPdfFile(bustCacheUrl, pdfName);
     } catch (err) {
       setError(err.message);
     } finally {
       setConverting(false);
-    }
-  };
-
-  /* ── Export Exact Live Preview Card to PDF via Client DOM Canvas ── */
-  const handleDownloadLivePreviewPdf = async () => {
-    if (!livePreviewRef.current) return;
-    try {
-      setExportingLivePdf(true);
-      const html2pdfModule = await import('html2pdf.js');
-      const html2pdf = html2pdfModule.default || html2pdfModule;
-      const element = livePreviewRef.current;
-      const docPrefix = effectiveIsProforma ? 'Proforma_Invoice' : 'Tax_Invoice';
-      const docNumber = (currentDocNo || 'REON').replace(/[^a-zA-Z0-9_-]/g, '_');
-
-      const opt = {
-        margin: [6, 6, 6, 6],
-        filename: `${docPrefix}_${docNumber}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          allowTaint: true,
-          scrollY: 0,
-          scrollX: 0,
-          backgroundColor: '#ffffff',
-          logging: false
-        },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-      };
-
-      await html2pdf().set(opt).from(element).save();
-    } catch (err) {
-      console.error('Failed to export live preview to PDF:', err);
-      window.print();
-    } finally {
-      setExportingLivePdf(false);
     }
   };
 
@@ -993,7 +990,16 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
                 <input
                   type="checkbox"
                   checked={sameAsBillTo}
-                  onChange={(e) => setSameAsBillTo(e.target.checked)}
+                  onChange={(e) => {
+                    const isSame = e.target.checked;
+                    setSameAsBillTo(isSame);
+                    if (!isSame) {
+                      setShipToDetails(prev => ({
+                        ...prev,
+                        gstin: prev.gstin && prev.gstin !== customerDetails.gstin ? prev.gstin : '',
+                      }));
+                    }
+                  }}
                   style={{ width: 16, height: 16, accentColor: C.teal }}
                 />
                 <span>Same as Bill To</span>
@@ -1023,6 +1029,15 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
                 value={sameAsBillTo ? customerDetails.address : shipToDetails.address}
                 onChange={updateObj(setShipToDetails)}
                 readOnly={sameAsBillTo}
+              />
+              <Field
+                label="Ship To GST No"
+                name="gstin"
+                placeholder={sameAsBillTo ? "Same as Bill To GST" : "Enter Ship To GST No (optional)"}
+                value={sameAsBillTo ? (customerDetails.gstin || '') : (shipToDetails.gstin || '')}
+                onChange={updateObj(setShipToDetails)}
+                readOnly={sameAsBillTo}
+                half
               />
               <Field
                 label="Shipping State"
@@ -1117,7 +1132,7 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
                       <Field label="Item Name *" name="name" value={item.name} onChange={e => updateItem(item.id, 'name', e.target.value)} />
                     </div>
                     <div style={{ flex: '1 1 18%', minWidth: 120 }}>
-                      <Field label="HSN / SSN Code" name="hsn" value={item.hsn} list="hsn-codes" onChange={e => {
+                      <Field label="HSN / SAC Code" name="hsn" value={item.hsn} list="hsn-codes" onChange={e => {
                         const val = e.target.value;
                         updateItem(item.id, 'hsn', val);
                         const match = HSN_DATA.find(h => h.hsn === val);
@@ -1187,7 +1202,7 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
                     ) : (
                       <span style={{ color: C.mid }}>IGST ({calc.igstRate}%): <b style={{ color: '#2563EB' }}>{fmtRs(calc.igstAmt)}</b></span>
                     )}
-                    <span style={{ color: C.navy, fontWeight: 700 }}>Invoice Value: <b style={{ color: C.orange }}>{fmtRs(calc.invoiceValue)}</b></span>
+                    <span style={{ color: C.navy, fontWeight: 700 }}>Taxable Value: <b style={{ color: C.orange }}>{fmtRs(calc.taxable)}</b></span>
                   </div>
                 </div>
               );
@@ -1212,8 +1227,6 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
         </>
       );
       case 2: {
-        const gstSummary = getGstSummary();
-        const grandTotal = getGrandTotal();
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
@@ -1221,304 +1234,51 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <button
                   type="button"
-                  onClick={handleDownloadLivePreviewPdf}
-                  disabled={exportingLivePdf}
+                  onClick={handleDownloadPdf}
+                  disabled={loading}
                   style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
-                    background: C.teal, color: 'white', borderRadius: 6, border: 'none',
-                    fontSize: 12, fontWeight: 700, cursor: exportingLivePdf ? 'wait' : 'pointer'
+                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px',
+                    background: '#2563EB', color: 'white', borderRadius: 7, border: 'none',
+                    fontSize: 12.5, fontWeight: 700, cursor: loading ? 'wait' : 'pointer',
+                    boxShadow: '0 2px 6px rgba(37,99,235,0.25)'
                   }}
-                  title="Download exact visual preview as PDF"
+                  title="Download Invoice PDF"
                 >
-                  {exportingLivePdf ? '⏳ Exporting…' : '📄 Save Live Preview as PDF'}
+                  <FileDown size={15} />
+                  <span>{loading ? '⏳ Generating PDF…' : `⬇ Download ${effectiveIsProforma ? 'Proforma' : 'Invoice'} PDF`}</span>
                 </button>
                 <button
                   type="button"
                   onClick={handlePrintPreview}
                   style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
-                    background: 'white', color: C.navy, border: `1px solid ${C.navy}`,
-                    borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px',
+                    background: 'white', color: C.navy, border: `1.5px solid ${C.navy}`,
+                    borderRadius: 7, fontSize: 12.5, fontWeight: 700, cursor: 'pointer'
                   }}
                   title="Print or Save via browser"
                 >
-                  🖨 Print
+                  <Printer size={15} />
+                  <span>Print</span>
                 </button>
               </div>
             </div>
 
-            {/* A4 Paper Style Preview Container */}
-            <div
-              ref={livePreviewRef}
-              id="reon-invoice-preview-card"
-              style={{
-                background: 'white', border: `1.5px solid ${C.navy}`, borderRadius: 8,
-                padding: 24, boxShadow: '0 4px 14px rgba(0,0,0,0.06)', fontSize: 12
-              }}
-            >
-              {/* Header: Logo + Company Info on Left, Document Title & Meta on Right */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: `2px solid ${C.navy}`, paddingBottom: 16, marginBottom: 16 }}>
-                <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-                  <img src="/reon_logo.png" alt="REON ENERGIES" crossOrigin="anonymous" style={{ width: 105, height: 'auto', maxHeight: 50, objectFit: 'contain' }} />
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: C.navy }}>REON ENERGIES PRIVATE LIMITED</div>
-                    <div style={{ fontSize: 10.5, color: '#4B5563', lineHeight: 1.4 }}>
-                      Singherbheri, Singur, Hooghly, West Bengal, 712409<br/>
-                      <b>Contact:</b> 8436649991 | <b>Email:</b> info@reonenergy.in<br/>
-                      <b>GSTIN:</b> {companyDetails.gstin}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 18, fontWeight: 900, color: C.navy, letterSpacing: '0.04em' }}>
-                    {effectiveIsProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'}
-                  </div>
-                  <div style={{ fontSize: 11, color: C.text, marginTop: 4, lineHeight: 1.5 }}>
-                    <b>{effectiveIsProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'} No:</b> {currentDocNo}<br/>
-                    <b>{effectiveIsProforma ? 'Date' : 'Invoice Date'}:</b> {invoiceDetails.invoiceDate}<br/>
-                    {effectiveIsProforma && invoiceDetails.validUntil && (
-                      <><b>Valid Until:</b> {invoiceDetails.validUntil}<br/></>
-                    )}
-                    {selectedQuotation?.offer_no && (
-                      <><b>Quotation Ref:</b> {selectedQuotation.offer_no}<br/></>
-                    )}
-                    {!effectiveIsProforma && (conversionSuccess?.proformaInvoiceNo || editData?.proforma_invoice_no) && (
-                      <><b>Proforma Ref:</b> {conversionSuccess?.proformaInvoiceNo || editData?.proforma_invoice_no}<br/></>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* BILL TO | SHIP TO (NO "Same as Bill To" text) */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12, marginBottom: 16, background: '#FAFAFA' }}>
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 800, color: C.navy, borderBottom: `1px solid ${C.border}`, paddingBottom: 4, marginBottom: 6 }}>
-                    BILL TO:
-                  </div>
-                  <div style={{ fontSize: 11.5, color: C.text, lineHeight: 1.4 }}>
-                    <b>{customerDetails.name}</b><br/>
-                    {customerDetails.address}<br/>
-                    <b>Phone:</b> {customerDetails.phone || '-'}<br/>
-                    <b>Email:</b> {customerDetails.email || '-'}<br/>
-                    {customerDetails.gstin && <><b>GSTIN:</b> {customerDetails.gstin}<br/></>}
-                    <b>State:</b> {customerDetails.state}
-                  </div>
-                </div>
-
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 800, color: C.navy, borderBottom: `1px solid ${C.border}`, paddingBottom: 4, marginBottom: 6 }}>
-                    SHIP TO:
-                  </div>
-                  <div style={{ fontSize: 11.5, color: C.text, lineHeight: 1.4 }}>
-                    <b>{sameAsBillTo ? customerDetails.name : (shipToDetails.name || customerDetails.name)}</b><br/>
-                    {sameAsBillTo ? customerDetails.address : (shipToDetails.address || customerDetails.address)}<br/>
-                    <b>Phone:</b> {(sameAsBillTo ? customerDetails.phone : shipToDetails.phone) || '-'}<br/>
-                    {(sameAsBillTo ? customerDetails.gstin : shipToDetails.gstin) && (
-                      <><b>GSTIN:</b> {sameAsBillTo ? customerDetails.gstin : shipToDetails.gstin}<br/></>
-                    )}
-                    <b>State:</b> {sameAsBillTo ? customerDetails.state : (shipToDetails.state || customerDetails.state)}
-                  </div>
-                </div>
-              </div>
-
-              {/* 8-Column Product Table with Centered Headers */}
-              <table style={{ width: '100%', borderCollapse: 'collapse', border: `1px solid ${C.navy}`, marginBottom: 16 }}>
-                <thead>
-                  <tr style={{ background: C.navy, color: 'white' }}>
-                    <th style={{ padding: '8px 4px', textAlign: 'center', verticalAlign: 'middle', fontSize: 10.5, border: '1px solid #374151', width: '5%' }}>Sl. No.</th>
-                    <th style={{ padding: '8px 6px', textAlign: 'center', verticalAlign: 'middle', fontSize: 10.5, border: '1px solid #374151', width: '32%' }}>Description</th>
-                    <th style={{ padding: '8px 6px', textAlign: 'center', verticalAlign: 'middle', fontSize: 10.5, border: '1px solid #374151', width: '12%' }}>HSN / SSN</th>
-                    <th style={{ padding: '8px 4px', textAlign: 'center', verticalAlign: 'middle', fontSize: 10.5, border: '1px solid #374151', width: '7%' }}>Qty</th>
-                    <th style={{ padding: '8px 6px', textAlign: 'center', verticalAlign: 'middle', fontSize: 10.5, border: '1px solid #374151', width: '8%' }}>Per</th>
-                    <th style={{ padding: '8px 6px', textAlign: 'center', verticalAlign: 'middle', fontSize: 10.5, border: '1px solid #374151', width: '12%' }}>Rate</th>
-                    <th style={{ padding: '8px 4px', textAlign: 'center', verticalAlign: 'middle', fontSize: 10.5, border: '1px solid #374151', width: '8%' }}>GST</th>
-                    <th style={{ padding: '8px 6px', textAlign: 'center', verticalAlign: 'middle', fontSize: 10.5, border: '1px solid #374151', width: '16%' }}>Invoice Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item, idx) => {
-                    const calc = calcItem(item);
-                    const unitLabel = (item.unit === 'OTHER' && item.customUnit ? item.customUnit : (item.unit || 'PCS')).toUpperCase();
-                    return (
-                      <tr key={item.id} style={{ borderBottom: `1px solid ${C.border}`, background: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                        <td style={{ padding: '7px 4px', textAlign: 'center', verticalAlign: 'middle', borderRight: `1px solid ${C.border}` }}>{idx + 1}</td>
-                        <td style={{ padding: '7px 8px', textAlign: 'left', verticalAlign: 'top', borderRight: `1px solid ${C.border}` }}>
-                          <b>{item.name}</b>
-                          {item.description && <div style={{ fontSize: 9.5, color: '#4B5563', marginTop: 2 }}>{item.description}</div>}
-                        </td>
-                        <td style={{ padding: '7px 6px', textAlign: 'center', verticalAlign: 'middle', borderRight: `1px solid ${C.border}` }}>{item.hsn || '-'}</td>
-                        <td style={{ padding: '7px 4px', textAlign: 'center', verticalAlign: 'middle', borderRight: `1px solid ${C.border}` }}>{item.quantity}</td>
-                        <td style={{ padding: '7px 6px', textAlign: 'center', verticalAlign: 'middle', borderRight: `1px solid ${C.border}`, fontWeight: 600 }}>{unitLabel}</td>
-                        <td style={{ padding: '7px 8px', textAlign: 'right', verticalAlign: 'middle', borderRight: `1px solid ${C.border}` }}>{fmtRs(item.rate)}</td>
-                        <td style={{ padding: '7px 4px', textAlign: 'center', verticalAlign: 'middle', borderRight: `1px solid ${C.border}` }}>{item.tax}%</td>
-                        <td style={{ padding: '7px 8px', textAlign: 'right', verticalAlign: 'middle', fontWeight: 600 }}>{fmtRs(calc.invoiceValue)}</td>
-                      </tr>
-                    );
-                  })}
-                  {charges.loadingCharges > 0 && (
-                    <tr style={{ borderBottom: `1px solid ${C.border}`, background: '#FFFBEB' }}>
-                      <td style={{ padding: 7, textAlign: 'center' }}></td>
-                      <td style={{ padding: 7, textAlign: 'left', fontWeight: 600 }} colSpan={6}>Loading / Forwarding Charges</td>
-                      <td style={{ padding: 7, textAlign: 'right', fontWeight: 600 }}>{fmtRs(charges.loadingCharges)}</td>
-                    </tr>
-                  )}
-                  <tr style={{ background: '#F3F4F6', fontWeight: 800 }}>
-                    <td style={{ padding: '8px 4px' }}></td>
-                    <td style={{ padding: '8px 8px', textAlign: 'left' }} colSpan={6}>Total Taxable Value</td>
-                    <td style={{ padding: '8px 8px', textAlign: 'right', color: C.navy }}>{fmtRs(getSubtotal() + (parseFloat(charges.loadingCharges) || 0))}</td>
-                  </tr>
-                </tbody>
-              </table>
-
-              {/* GST Summary & Financial Summary Side by Side */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: 16, marginBottom: 16 }}>
-                {/* GST Summary Table */}
-                <div style={{ border: `1px solid ${C.navy}`, borderRadius: 6, overflow: 'hidden' }}>
-                  <div style={{ background: '#F3F4F6', padding: '6px 10px', fontSize: 11, fontWeight: 800, color: C.navy, borderBottom: `1px solid ${C.border}` }}>
-                    GST SUMMARY ({intraState ? 'INTRA-STATE: WEST BENGAL' : 'INTER-STATE SUPPLY'})
-                  </div>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-                    <thead>
-                      <tr style={{ background: '#F9FAFB', borderBottom: `1px solid ${C.border}` }}>
-                        <th style={{ padding: '5px 8px', textAlign: 'left' }}>GST Component</th>
-                        <th style={{ padding: '5px 6px', textAlign: 'center' }}>Rate</th>
-                        <th style={{ padding: '5px 8px', textAlign: 'right' }}>Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {intraState ? (
-                        <>
-                          <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                            <td style={{ padding: '5px 8px' }}>IGST</td>
-                            <td style={{ padding: '5px 6px', textAlign: 'center' }}>0%</td>
-                            <td style={{ padding: '5px 8px', textAlign: 'right' }}>{fmtRs(0)}</td>
-                          </tr>
-                          {gstSummary.map(g => (
-                            <React.Fragment key={g.rate}>
-                              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                                <td style={{ padding: '5px 8px' }}>CGST ({g.rate / 2}%)</td>
-                                <td style={{ padding: '5px 6px', textAlign: 'center' }}>{g.rate / 2}%</td>
-                                <td style={{ padding: '5px 8px', textAlign: 'right' }}>{fmtRs(g.cgst)}</td>
-                              </tr>
-                              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                                <td style={{ padding: '5px 8px' }}>SGST ({g.rate / 2}%)</td>
-                                <td style={{ padding: '5px 6px', textAlign: 'center' }}>{g.rate / 2}%</td>
-                                <td style={{ padding: '5px 8px', textAlign: 'right' }}>{fmtRs(g.sgst)}</td>
-                              </tr>
-                            </React.Fragment>
-                          ))}
-                        </>
-                      ) : (
-                        <>
-                          {gstSummary.map(g => (
-                            <tr key={g.rate} style={{ borderBottom: `1px solid ${C.border}` }}>
-                              <td style={{ padding: '5px 8px' }}>IGST ({g.rate}%)</td>
-                              <td style={{ padding: '5px 6px', textAlign: 'center' }}>{g.rate}%</td>
-                              <td style={{ padding: '5px 8px', textAlign: 'right' }}>{fmtRs(g.igst)}</td>
-                            </tr>
-                          ))}
-                          <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                            <td style={{ padding: '5px 8px' }}>CGST</td>
-                            <td style={{ padding: '5px 6px', textAlign: 'center' }}>0%</td>
-                            <td style={{ padding: '5px 8px', textAlign: 'right' }}>{fmtRs(0)}</td>
-                          </tr>
-                          <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                            <td style={{ padding: '5px 8px' }}>SGST</td>
-                            <td style={{ padding: '5px 6px', textAlign: 'center' }}>0%</td>
-                            <td style={{ padding: '5px 8px', textAlign: 'right' }}>{fmtRs(0)}</td>
-                          </tr>
-                        </>
-                      )}
-                      <tr style={{ background: '#EBF9FB', fontWeight: 800 }}>
-                        <td style={{ padding: '6px 8px' }} colSpan={2}>Total Tax</td>
-                        <td style={{ padding: '6px 8px', textAlign: 'right', color: C.teal }}>{fmtRs(getTotalTax())}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Financial Summary Table */}
-                <div style={{ border: `1px solid ${C.navy}`, borderRadius: 6, overflow: 'hidden' }}>
-                  <div style={{ background: '#F3F4F6', padding: '6px 10px', fontSize: 11, fontWeight: 800, color: C.navy, borderBottom: `1px solid ${C.border}` }}>
-                    FINANCIAL SUMMARY
-                  </div>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
-                    <tbody>
-                      <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                        <td style={{ padding: '5px 8px' }}>Subtotal</td>
-                        <td style={{ padding: '5px 8px', textAlign: 'right' }}>{fmtRs(getSubtotal())}</td>
-                      </tr>
-                      <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                        <td style={{ padding: '5px 8px' }}>Discount</td>
-                        <td style={{ padding: '5px 8px', textAlign: 'right' }}>{fmtRs(0)}</td>
-                      </tr>
-                      <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                        <td style={{ padding: '5px 8px' }}>Taxable Value</td>
-                        <td style={{ padding: '5px 8px', textAlign: 'right' }}>{fmtRs(getSubtotal())}</td>
-                      </tr>
-                      {intraState ? (
-                        <>
-                          <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                            <td style={{ padding: '5px 8px' }}>CGST</td>
-                            <td style={{ padding: '5px 8px', textAlign: 'right' }}>{fmtRs(getCgstTotal())}</td>
-                          </tr>
-                          <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                            <td style={{ padding: '5px 8px' }}>SGST</td>
-                            <td style={{ padding: '5px 8px', textAlign: 'right' }}>{fmtRs(getSgstTotal())}</td>
-                          </tr>
-                        </>
-                      ) : (
-                        <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                          <td style={{ padding: '5px 8px' }}>IGST</td>
-                          <td style={{ padding: '5px 8px', textAlign: 'right' }}>{fmtRs(getIgstTotal())}</td>
-                        </tr>
-                      )}
-                      {charges.loadingCharges > 0 && (
-                        <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                          <td style={{ padding: '5px 8px' }}>Loading / Forwarding</td>
-                          <td style={{ padding: '5px 8px', textAlign: 'right' }}>{fmtRs(charges.loadingCharges)}</td>
-                        </tr>
-                      )}
-                      <tr style={{ background: '#FEF3C7', fontWeight: 900, fontSize: 13 }}>
-                        <td style={{ padding: '8px 8px', color: C.navy }}>Grand Total</td>
-                        <td style={{ padding: '8px 8px', textAlign: 'right', color: C.navy }}>{fmtRs(grandTotal)}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Amount in Words */}
-              <div style={{ padding: '8px 12px', background: '#F8FAFC', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11, marginBottom: 16 }}>
-                <b>Amount in Words:</b> {numToWordsINR(grandTotal)}
-              </div>
-
-              {/* Bank Details & Signature Section */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12, background: '#FAFAFA' }}>
-                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                  <img src="/qr_reon.png" alt="REON UPI QR" crossOrigin="anonymous" style={{ width: 70, height: 70, objectFit: 'contain' }} />
-                  <div style={{ fontSize: 10.5, lineHeight: 1.4, color: C.text }}>
-                    <b>Company Bank Details:</b><br/>
-                    A/c Name: <b>REON ENERGIES PRIVATE LIMITED</b><br/>
-                    Bank: Punjab National Bank<br/>
-                    A/c No: <b>0162202100001274</b> | IFSC: <b>PUNB0016220</b><br/>
-                    UPI ID: <b>8436649991m@pnb</b>
-                  </div>
-                </div>
-
-                <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'flex-end' }}>
-                  <div style={{ fontSize: 11, color: C.navy, fontWeight: 700 }}>For REON ENERGIES PRIVATE LIMITED</div>
-                  {signatureUrl ? (
-                    <img src={signatureUrl} alt="Signature" crossOrigin="anonymous" style={{ maxHeight: 38, margin: '6px 0' }} />
-                  ) : (
-                    <div style={{ height: 38 }} />
-                  )}
-                  <div style={{ fontSize: 9.5, color: '#4B5563' }}>System-generated bill signed attached</div>
-                  <div style={{ fontSize: 11, fontWeight: 800, color: C.navy }}>Authorised Signatory</div>
-                </div>
-              </div>
-            </div>
+            {/* A4 Paper Style Preview Card */}
+            <InvoicePreviewCard
+              cardRef={livePreviewRef}
+              isProforma={effectiveIsProforma}
+              companyDetails={companyDetails}
+              customerDetails={customerDetails}
+              shipToDetails={shipToDetails}
+              sameAsBillTo={sameAsBillTo}
+              invoiceDetails={invoiceDetails}
+              items={items}
+              charges={charges}
+              selectedQuotation={selectedQuotation}
+              proformaRef={conversionSuccess?.proformaInvoiceNo || editData?.proforma_invoice_no}
+              currentDocNo={currentDocNo}
+              signatureUrl={signatureUrl}
+            />
           </div>
         );
       }
@@ -1591,19 +1351,8 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
                 border: 'none', cursor: 'pointer', fontSize: 13
               }}
             >
-              ⬇ Download Official PDF ({currentDocNo})
-            </button>
-
-            <button
-              onClick={handleDownloadLivePreviewPdf}
-              disabled={exportingLivePdf}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px',
-                background: C.teal, color: 'white', fontWeight: 700, borderRadius: 8,
-                border: 'none', cursor: exportingLivePdf ? 'wait' : 'pointer', fontSize: 13
-              }}
-            >
-              {exportingLivePdf ? '⏳ Generating…' : '📄 Download Exact Live PDF'}
+              <FileDown size={16} />
+              <span>⬇ Download {effectiveIsProforma ? 'Proforma Invoice' : 'Tax Invoice'} PDF ({currentDocNo})</span>
             </button>
 
             <button
@@ -1614,7 +1363,8 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
                 fontWeight: 700, borderRadius: 8, cursor: 'pointer', fontSize: 13
               }}
             >
-              🖨 Print / Save
+              <Printer size={16} />
+              <span>🖨 Print / Save</span>
             </button>
 
             {/* Turn into Original Tax Invoice CTA */}
@@ -1671,7 +1421,7 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
               boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
             }}
           >
-            {loading ? '⏳ Processing…' : (editData ? `💾 Save Changes to ${effectiveIsProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'}` : `📄 Generate ${effectiveIsProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'} PDF`)}
+            {loading ? '⏳ Processing…' : (editData ? `💾 Save Changes to ${effectiveIsProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'}` : `📄 Generate & Download ${effectiveIsProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'} PDF`)}
           </button>
         )}
       </div>

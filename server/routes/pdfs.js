@@ -42,7 +42,11 @@ router.get('/:filename', async (req, res, next) => {
     }
 
     if (filename.startsWith('INV-')) {
-      const result = await pool.query('SELECT * FROM invoices WHERE pdf_url LIKE $1', [`%${filename}%`]);
+      let result = await pool.query('SELECT * FROM invoices WHERE pdf_url LIKE $1', [`%${filename}%`]);
+      if (result.rows.length === 0) {
+        const cleanNo = filename.replace(/\.pdf$/, '').replace(/^[A-Za-z]+[-_]/, '').replace(/[-_]/g, '/');
+        result = await pool.query('SELECT * FROM invoices WHERE invoice_no LIKE $1 OR invoice_no LIKE $2', [`%${cleanNo}%`, `%${filename.replace(/\.pdf$/, '')}%`]);
+      }
       
       if (result.rows.length === 0) {
         return res.status(404).send('Invoice not found');
@@ -81,7 +85,11 @@ router.get('/:filename', async (req, res, next) => {
       });
 
     } else if (filename.startsWith('PI-')) {
-      const result = await pool.query('SELECT * FROM proforma_invoices WHERE pdf_url LIKE $1', [`%${filename}%`]);
+      let result = await pool.query('SELECT * FROM proforma_invoices WHERE pdf_url LIKE $1', [`%${filename}%`]);
+      if (result.rows.length === 0) {
+        const cleanNo = filename.replace(/\.pdf$/, '').replace(/^[A-Za-z]+[-_]/, '').replace(/[-_]/g, '/');
+        result = await pool.query('SELECT * FROM proforma_invoices WHERE proforma_invoice_no LIKE $1 OR proforma_invoice_no LIKE $2', [`%${cleanNo}%`, `%${filename.replace(/\.pdf$/, '')}%`]);
+      }
       
       if (result.rows.length === 0) {
         return res.status(404).send('Proforma Invoice not found');

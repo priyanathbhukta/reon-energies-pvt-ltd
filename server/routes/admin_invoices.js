@@ -11,6 +11,17 @@ import pool from '../db.js';
 const execFileAsync = util.promisify(execFile);
 const router = express.Router();
 
+// Ensure invoices table schema has all necessary columns including charges
+pool.query(`
+  ALTER TABLE invoices ADD COLUMN IF NOT EXISTS charges JSONB DEFAULT '{}'::jsonb;
+  ALTER TABLE invoices ADD COLUMN IF NOT EXISTS ship_to_details JSONB DEFAULT '{}'::jsonb;
+  ALTER TABLE invoices ADD COLUMN IF NOT EXISTS same_as_bill_to BOOLEAN DEFAULT true;
+  ALTER TABLE invoices ADD COLUMN IF NOT EXISTS igst_total NUMERIC(15, 2) DEFAULT 0;
+  ALTER TABLE invoices ADD COLUMN IF NOT EXISTS authorized_signature_url TEXT;
+`).catch(err => {
+  console.warn('[DB] Warning ensuring invoices schema columns:', err.message);
+});
+
 /**
  * Role-Based Access Control Middleware
  * Invoices are editable ONLY by users with active profile 'admin'.
@@ -122,7 +133,7 @@ router.post('/', async (req, res) => {
     }
   }
 
-  const pdfFileName = `${invoiceNo.replace(/\//g, '-')}.pdf`;
+  const pdfFileName = invoiceNo.startsWith('INV') ? `${invoiceNo.replace(/\//g, '-')}.pdf` : `INV-${invoiceNo.replace(/\//g, '-')}.pdf`;
   const localPdfPath = path.join(PDF_DIR, pdfFileName);
 
   const client = await pool.connect();
@@ -134,6 +145,16 @@ router.post('/', async (req, res) => {
     data.sgstTotal = taxInfo.sgstTotal;
     data.igstTotal = taxInfo.igstTotal;
     data.grandTotal = taxInfo.grandTotal;
+    data.isProforma = false;
+    data.documentType = 'TAX INVOICE';
+    const isSameAsBillTo = data.sameAsBillTo !== false;
+    data.sameAsBillTo = isSameAsBillTo;
+    data.shipToDetails = isSameAsBillTo
+      ? (data.customerDetails || {})
+      : {
+          ...(data.shipToDetails || {}),
+          gstin: data.shipToDetails?.gstin ? String(data.shipToDetails.gstin).trim() : '',
+        };
     const jsonPayload = JSON.stringify(data);
     console.log(`[PDF] Generating Invoice: ${pdfFileName}`);
 
@@ -199,18 +220,17 @@ router.post('/', async (req, res) => {
     const grandTotal = parseFloat(data.grandTotal || 0);
     const sourceProformaInvoiceId = data.source_proforma_invoice_id || data.sourceProformaInvoiceId || null;
     const proformaInvoiceNo = data.proforma_invoice_no || data.proformaInvoiceNo || null;
-    const shipToDetails = data.shipToDetails || {};
-    const sameAsBillTo = data.sameAsBillTo !== false;
     const signatureUrl = data.authorizedSignatureUrl || null;
+    const charges = data.charges || {};
 
     const invoiceQuery = `
       INSERT INTO invoices (
         invoice_no, company_details, customer_details, ship_to_details, same_as_bill_to,
-        invoice_details, items, subtotal, cgst_total, sgst_total, igst_total, grand_total, pdf_url,
+        invoice_details, items, charges, subtotal, cgst_total, sgst_total, igst_total, grand_total, pdf_url,
         quotation_id, quotation_no, lead_id, partner_id, pos_name, pos_id, user_id,
         source_proforma_invoice_id, proforma_invoice_no, payment_status, total_received,
         outstanding_amount, authorized_signature_url, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,'unpaid',0.00,$12,$23,NOW())
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,'unpaid',0.00,$13,$24,NOW())
       ON CONFLICT (invoice_no) DO UPDATE SET
         company_details = EXCLUDED.company_details,
         customer_details = EXCLUDED.customer_details,
@@ -218,6 +238,7 @@ router.post('/', async (req, res) => {
         same_as_bill_to = EXCLUDED.same_as_bill_to,
         invoice_details = EXCLUDED.invoice_details,
         items = EXCLUDED.items,
+        charges = EXCLUDED.charges,
         subtotal = EXCLUDED.subtotal,
         cgst_total = EXCLUDED.cgst_total,
         sgst_total = EXCLUDED.sgst_total,
@@ -242,9 +263,10 @@ router.post('/', async (req, res) => {
       JSON.stringify(data.companyDetails || {}),
       JSON.stringify(data.customerDetails || {}),
       JSON.stringify(shipToDetails),
-      sameAsBillTo,
+      isSameAsBillTo,
       JSON.stringify(data.invoiceDetails || {}),
       JSON.stringify(data.items || []),
+      JSON.stringify(charges),
       taxInfo.subtotal,
       taxInfo.cgstTotal,
       taxInfo.sgstTotal,
@@ -604,6 +626,7 @@ router.put('/:id', requireAdminRole, async (req, res) => {
     subtotal,
     cgstTotal,
     sgstTotal,
+    igstTotal,
     grandTotal,
     quotation_id,
     quotation_no,
@@ -624,9 +647,17 @@ router.put('/:id', requireAdminRole, async (req, res) => {
     const invoiceNo = invoiceDetails?.invoiceNo || inv.invoice_no;
     const invoiceDate = invoiceDetails?.invoiceDate || inv.created_at;
 
-    const pdfFileName = `INV-${invoiceNo.replace(/\//g, '-')}.pdf`;
+    const pdfFileName = invoiceNo.startsWith('INV') ? `${invoiceNo.replace(/\//g, '-')}.pdf` : `INV-${invoiceNo.replace(/\//g, '-')}.pdf`;
     const outputPath = path.join(PDF_DIR, pdfFileName);
     const pdfUrl = `/pdfs/${pdfFileName}`;
+
+    const isSameAsBillTo = sameAsBillTo !== false;
+    const safeShipTo = isSameAsBillTo
+      ? customerDetails
+      : {
+          ...(shipToDetails || {}),
+          gstin: shipToDetails?.gstin ? String(shipToDetails.gstin).trim() : '',
+        };
 
     const updateQuery = `
       UPDATE invoices
@@ -640,27 +671,29 @@ router.put('/:id', requireAdminRole, async (req, res) => {
           subtotal = $8,
           cgst_total = $9,
           sgst_total = $10,
-          grand_total = $11,
-          quotation_id = $12,
-          quotation_no = $13,
-          authorized_signature_url = $14,
-          pdf_url = $15,
+          igst_total = $11,
+          grand_total = $12,
+          quotation_id = $13,
+          quotation_no = $14,
+          authorized_signature_url = $15,
+          pdf_url = $16,
           updated_at = NOW()
-      WHERE id = $16
+      WHERE id = $17
       RETURNING *
     `;
 
     const updatedResult = await client.query(updateQuery, [
       JSON.stringify(companyDetails || {}),
       JSON.stringify(customerDetails || {}),
-      JSON.stringify(shipToDetails || {}),
-      sameAsBillTo !== false,
+      JSON.stringify(safeShipTo || {}),
+      isSameAsBillTo,
       JSON.stringify(invoiceDetails || {}),
       JSON.stringify(items || []),
       JSON.stringify(charges || {}),
       subtotal,
       cgstTotal,
       sgstTotal,
+      igstTotal || 0,
       grandTotal,
       quotation_id || inv.quotation_id,
       quotation_no || inv.quotation_no,
@@ -675,14 +708,15 @@ router.put('/:id', requireAdminRole, async (req, res) => {
       documentType: 'TAX INVOICE',
       companyDetails,
       customerDetails,
-      shipToDetails: sameAsBillTo !== false ? customerDetails : (shipToDetails || customerDetails),
-      sameAsBillTo: sameAsBillTo !== false,
+      shipToDetails: safeShipTo,
+      sameAsBillTo: isSameAsBillTo,
       invoiceDetails: { ...(invoiceDetails || {}), invoiceNo, invoiceDate },
       items,
       charges,
       subtotal,
       cgstTotal,
       sgstTotal,
+      igstTotal: igstTotal || 0,
       grandTotal,
       quotationNo: quotation_no || inv.quotation_no,
       proformaInvoiceNo: inv.proforma_invoice_no,

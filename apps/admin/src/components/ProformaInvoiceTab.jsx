@@ -3,9 +3,10 @@ import { API, parseJsonSafely } from '@/lib/legacy-api';
 import { downloadPdfFile } from '@/lib/download';
 import {
   FileText, Search, RefreshCw, Plus, FileDown,
-  CheckCircle, ArrowRight, AlertCircle, Trash2, Edit2, ShieldAlert
+  CheckCircle, ArrowRight, AlertCircle, Trash2, Edit2, ShieldAlert, Eye
 } from 'lucide-react';
 import InvoiceForm, { fmtRs } from './InvoiceForm';
+import InvoicePreviewModal from './InvoicePreviewModal';
 
 export default function ProformaInvoiceTab({ onNavigateToInvoice }) {
   const [view, setView] = useState('list'); // 'list' | 'create' | 'edit'
@@ -16,6 +17,7 @@ export default function ProformaInvoiceTab({ onNavigateToInvoice }) {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [editingItem, setEditingItem] = useState(null);
+  const [previewProforma, setPreviewProforma] = useState(null);
 
   // Conversion Confirmation Dialog state
   const [convertModal, setConvertModal] = useState({
@@ -338,6 +340,16 @@ export default function ProformaInvoiceTab({ onNavigateToInvoice }) {
                           {/* Actions */}
                           <td className="py-3.5 px-4 text-right">
                             <div className="flex items-center justify-end gap-2">
+                              {/* Preview Proforma (Downloadable) */}
+                              <button
+                                type="button"
+                                onClick={() => setPreviewProforma(pi)}
+                                className="p-1.5 text-navy hover:bg-navy/10 rounded-lg transition cursor-pointer"
+                                title="Preview Proforma (Downloadable)"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+
                               {/* PDF Download */}
                               {pdfFullUrl ? (
                                 <button
@@ -537,6 +549,14 @@ export default function ProformaInvoiceTab({ onNavigateToInvoice }) {
           </div>
         </div>
       )}
+
+      {/* Proforma Invoice Live Preview Modal (Downloadable) */}
+      <InvoicePreviewModal
+        isOpen={Boolean(previewProforma)}
+        invoice={previewProforma}
+        isProforma={true}
+        onClose={() => setPreviewProforma(null)}
+      />
     </div>
   );
 }

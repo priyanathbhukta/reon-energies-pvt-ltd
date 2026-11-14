@@ -246,7 +246,7 @@ router.post('/', async (req, res) => {
   data.isProforma = true;
   data.documentType = 'PROFORMA INVOICE';
 
-  const pdfFileName = `${proformaInvoiceNo.replace(/\//g, '-')}.pdf`;
+  const pdfFileName = proformaInvoiceNo.startsWith('PI') ? `${proformaInvoiceNo.replace(/\//g, '-')}.pdf` : `PI-${proformaInvoiceNo.replace(/\//g, '-')}.pdf`;
   const localPdfPath = path.join(PDF_DIR, pdfFileName);
 
   const client = await pool.connect();
@@ -447,6 +447,14 @@ router.post('/:id/generate-invoice', async (req, res) => {
     invoiceDetails.invoiceDate = new Date().toISOString().split('T')[0];
     invoiceDetails.dueDate = new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0];
 
+    const isSameAsBillTo = pi.same_as_bill_to !== false;
+    const safeShipTo = isSameAsBillTo
+      ? customerDetails
+      : {
+          ...(shipToDetails || {}),
+          gstin: shipToDetails?.gstin ? String(shipToDetails.gstin).trim() : '',
+        };
+
     const taxInfo = calculateTaxes(customerDetails, items, charges);
     const pdfData = {
       isProforma: false,
@@ -454,8 +462,8 @@ router.post('/:id/generate-invoice', async (req, res) => {
       documentType: 'TAX INVOICE',
       companyDetails,
       customerDetails,
-      shipToDetails,
-      sameAsBillTo: pi.same_as_bill_to !== false,
+      shipToDetails: safeShipTo,
+      sameAsBillTo: isSameAsBillTo,
       invoiceDetails,
       items: taxInfo.items,
       charges,
@@ -492,12 +500,12 @@ router.post('/:id/generate-invoice', async (req, res) => {
     const insertInvoiceQuery = `
       INSERT INTO invoices (
         invoice_no, company_details, customer_details, ship_to_details, same_as_bill_to,
-        invoice_details, items, subtotal, cgst_total, sgst_total, igst_total, grand_total, pdf_url,
+        invoice_details, items, charges, subtotal, cgst_total, sgst_total, igst_total, grand_total, pdf_url,
         source_proforma_invoice_id, proforma_invoice_no, quotation_id, quotation_no,
         lead_id, partner_id, pos_name, pos_id, user_id,
         payment_status, total_received, outstanding_amount, authorized_signature_url,
         created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,NOW(),NOW())
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,'unpaid',0.00,$13,$24,NOW(),NOW())
       RETURNING *;
     `;
 
@@ -505,10 +513,11 @@ router.post('/:id/generate-invoice', async (req, res) => {
       invoiceNo,
       JSON.stringify(companyDetails),
       JSON.stringify(customerDetails),
-      JSON.stringify(shipToDetails),
-      pi.same_as_bill_to !== false,
+      JSON.stringify(safeShipTo),
+      isSameAsBillTo,
       JSON.stringify(invoiceDetails),
       JSON.stringify(taxInfo.items),
+      JSON.stringify(charges || {}),
       taxInfo.subtotal,
       taxInfo.cgstTotal,
       taxInfo.sgstTotal,
@@ -524,9 +533,6 @@ router.post('/:id/generate-invoice', async (req, res) => {
       pi.pos_name,
       pi.pos_id,
       pi.user_id,
-      'unpaid',
-      0.00,
-      grandTotal,
       pi.authorized_signature_url || null,
     ];
 
@@ -633,7 +639,7 @@ router.put('/:id', requireAdminRole, async (req, res) => {
     const proformaInvoiceNo = invoiceDetails?.invoiceNo || pi.proforma_invoice_no;
     const invoiceDate = invoiceDetails?.invoiceDate || pi.created_at;
 
-    const pdfFileName = `PI-${proformaInvoiceNo.replace(/\//g, '-')}.pdf`;
+    const pdfFileName = proformaInvoiceNo.startsWith('PI') ? `${proformaInvoiceNo.replace(/\//g, '-')}.pdf` : `PI-${proformaInvoiceNo.replace(/\//g, '-')}.pdf`;
     const outputPath = path.join(PDF_DIR, pdfFileName);
     const pdfUrl = `/pdfs/${pdfFileName}`;
 
