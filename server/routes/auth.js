@@ -77,7 +77,9 @@ router.post('/send-otp', async (req, res) => {
       return res.json({ success: true, message: 'OTP sent to mobile.' });
     }
 
-    const email = process.env.OTP_EMAIL || 'reonenergiespvtltd@gmail.com';
+    const email = (process.env.OTP_EMAIL && process.env.OTP_EMAIL !== 'support@reonenergy.in')
+      ? process.env.OTP_EMAIL
+      : 'reonenergiespvtltd@gmail.com';
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     
     otpStore.set(email, {
@@ -113,7 +115,9 @@ router.post('/send-otp', async (req, res) => {
 // POST /api/auth/verify-otp
 router.post('/verify-otp', (req, res) => {
   const { otp } = req.body;
-  const email = process.env.OTP_EMAIL || 'reonenergiespvtltd@gmail.com';
+  const email = (process.env.OTP_EMAIL && process.env.OTP_EMAIL !== 'support@reonenergy.in')
+    ? process.env.OTP_EMAIL
+    : 'reonenergiespvtltd@gmail.com';
   
   if (!otp) return res.status(400).json({ error: 'OTP is required.' });
 

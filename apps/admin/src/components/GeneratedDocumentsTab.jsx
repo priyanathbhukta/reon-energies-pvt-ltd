@@ -239,7 +239,9 @@ export default function GeneratedDocumentsTab({ onEditInvoice, onEditQuotation }
       const verifyData = await verifyRes.json();
       if (!verifyData.success) throw new Error(verifyData.error || 'Invalid OTP');
 
-      const endpoint = otpModal.doc.type === 'Invoice' ? 'invoices' : 'quotations';
+      let endpoint = 'quotations';
+      if (otpModal.doc.type === 'Invoice') endpoint = 'invoices';
+      else if (otpModal.doc.type === 'Proforma' || otpModal.doc.type === 'Proforma Invoice') endpoint = 'proforma-invoices';
       const delRes = await fetch(`${API}/api/admin/${endpoint}/${otpModal.doc.id}`, { method: 'DELETE', headers });
       if (!delRes.ok) throw new Error('Failed to delete document');
 
