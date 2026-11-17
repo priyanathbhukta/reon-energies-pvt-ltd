@@ -69,6 +69,14 @@ if (!fs.existsSync(PDF_DIR)) {
 
 const runPythonCommand = process.platform === 'win32' ? 'python' : 'python3';
 
+export const isUuid = (val) => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+export const safeUuid = (val) => (isUuid(val) ? val : null);
+export const safeInt = (val) => {
+  if (val === null || val === undefined || val === '') return null;
+  const n = parseInt(val, 10);
+  return isNaN(n) ? null : n;
+};
+
 // ── Helper: Get current Financial Year (e.g. '26-27') ─────────────────────
 export function getCurrentFinancialYear(date = new Date()) {
   const d = new Date(date);
@@ -137,6 +145,7 @@ router.post('/', async (req, res) => {
   const localPdfPath = path.join(PDF_DIR, pdfFileName);
 
   const client = await pool.connect();
+  let inTransaction = false;
   try {
     const taxInfo = calculateTaxes(data.customerDetails, data.items, data.charges);
     data.items = taxInfo.items;
@@ -149,12 +158,13 @@ router.post('/', async (req, res) => {
     data.documentType = 'TAX INVOICE';
     const isSameAsBillTo = data.sameAsBillTo !== false;
     data.sameAsBillTo = isSameAsBillTo;
-    data.shipToDetails = isSameAsBillTo
+    const safeShipToDetails = isSameAsBillTo
       ? (data.customerDetails || {})
       : {
           ...(data.shipToDetails || {}),
           gstin: data.shipToDetails?.gstin ? String(data.shipToDetails.gstin).trim() : '',
         };
+    data.shipToDetails = safeShipToDetails;
     const jsonPayload = JSON.stringify(data);
     console.log(`[PDF] Generating Invoice: ${pdfFileName}`);
 
@@ -174,51 +184,52 @@ router.post('/', async (req, res) => {
     const pdfUrl = `${getBaseUrl(req)}/pdfs/${pdfFileName}`;
 
     await client.query('BEGIN');
+    inTransaction = true;
 
     // ── Check if a quotation was linked ────────────────────────
-    let quotationId = data.quotation_id || data.quotationId || null;
+    let quotationId = safeInt(data.quotation_id || data.quotationId);
     let quotationNo = data.quotation_no || data.quotationNo || null;
-    let leadId = data.lead_id || data.leadId || null;
-    let partnerId = data.partner_id || data.partnerId || null;
+    let leadId = safeUuid(data.lead_id || data.leadId);
+    let partnerId = safeUuid(data.partner_id || data.partnerId);
     let posName = data.pos_name || null;
     let posId = data.pos_id || null;
-    let userId = data.user_id || data.userId || null;
+    let userId = safeUuid(data.user_id || data.userId);
     let matchedQuotation = null;
     let matchedLead = null;
 
     if (quotationId || quotationNo) {
       const qRes = await client.query(
         'SELECT * FROM quotations WHERE id = $1 OR offer_no = $2 LIMIT 1',
-        [quotationId ? parseInt(quotationId, 10) : -1, quotationNo || '']
+        [quotationId || -1, quotationNo || '']
       );
       if (qRes.rows.length > 0) {
         matchedQuotation = qRes.rows[0];
         quotationId = matchedQuotation.id;
         quotationNo = matchedQuotation.offer_no;
-        partnerId = matchedQuotation.partner_id || partnerId;
+        partnerId = safeUuid(matchedQuotation.partner_id) || partnerId;
         posName = matchedQuotation.pos_name || posName;
         posId = matchedQuotation.pos_id || posId;
-        userId = matchedQuotation.user_id || userId;
+        userId = safeUuid(matchedQuotation.user_id) || userId;
       }
     }
 
     if (quotationId || leadId) {
       const lRes = await client.query(
-        'SELECT * FROM leads WHERE quotation_id = $1 OR id = $2 LIMIT 1',
+        'SELECT * FROM leads WHERE (quotation_id IS NOT NULL AND quotation_id = $1) OR id = $2 LIMIT 1',
         [quotationId || -1, leadId || '00000000-0000-0000-0000-000000000000']
       );
       if (lRes.rows.length > 0) {
         matchedLead = lRes.rows[0];
         leadId = matchedLead.id;
-        partnerId = matchedLead.partner_id || partnerId;
+        partnerId = safeUuid(matchedLead.partner_id) || partnerId;
         posName = matchedLead.pos_name || posName;
         posId = matchedLead.pos_id || posId;
-        userId = matchedLead.user_id || userId;
+        userId = safeUuid(matchedLead.user_id) || userId;
       }
     }
 
     const grandTotal = parseFloat(data.grandTotal || 0);
-    const sourceProformaInvoiceId = data.source_proforma_invoice_id || data.sourceProformaInvoiceId || null;
+    const sourceProformaInvoiceId = safeInt(data.source_proforma_invoice_id || data.sourceProformaInvoiceId);
     const proformaInvoiceNo = data.proforma_invoice_no || data.proformaInvoiceNo || null;
     const signatureUrl = data.authorizedSignatureUrl || null;
     const charges = data.charges || {};
@@ -262,7 +273,7 @@ router.post('/', async (req, res) => {
       invoiceNo,
       JSON.stringify(data.companyDetails || {}),
       JSON.stringify(data.customerDetails || {}),
-      JSON.stringify(shipToDetails),
+      JSON.stringify(safeShipToDetails),
       isSameAsBillTo,
       JSON.stringify(data.invoiceDetails || {}),
       JSON.stringify(data.items || []),
@@ -288,41 +299,60 @@ router.post('/', async (req, res) => {
     const result = await client.query(invoiceQuery, invoiceValues);
     const createdInvoice = result.rows[0];
 
-    // ── Transactionally Convert Linked Quotation & Lead ────────
-    if (matchedQuotation || quotationId) {
-      await client.query(
-        `UPDATE quotations 
-         SET status = 'converted', invoice_id = $1, invoice_no = $2, converted_at = NOW(), updated_at = NOW() 
-         WHERE id = $3`,
-        [createdInvoice.id, createdInvoice.invoice_no, quotationId]
-      );
+    // ── Transactionally Convert Linked Quotation & Lead using SAVEPOINTs ────────
+    if (quotationId) {
+      try {
+        await client.query('SAVEPOINT sp_quotation');
+        await client.query(
+          `UPDATE quotations 
+           SET status = 'converted', invoice_id = $1, invoice_no = $2, converted_at = NOW(), updated_at = NOW() 
+           WHERE id = $3`,
+          [createdInvoice.id, createdInvoice.invoice_no, quotationId]
+        );
+        await client.query('RELEASE SAVEPOINT sp_quotation');
+      } catch (qErr) {
+        console.warn('[Invoice] Quotation link notice:', qErr.message);
+        try { await client.query('ROLLBACK TO SAVEPOINT sp_quotation'); } catch (_) {}
+      }
     }
 
-    if (matchedLead || leadId || quotationId) {
-      await client.query(
-        `UPDATE leads 
-         SET stage = 'converted', lead_status = 'Converted', 
-             invoice_id = $1, invoice_no = $2, invoice_amount = $3, 
-             converted_at = NOW(), updated_at = NOW() 
-         WHERE quotation_id = $4 OR id = $5`,
-        [createdInvoice.id, createdInvoice.invoice_no, grandTotal, quotationId || -1, leadId || '00000000-0000-0000-0000-000000000000']
-      );
+    if (leadId || quotationId) {
+      try {
+        await client.query('SAVEPOINT sp_lead');
+        await client.query(
+          `UPDATE leads 
+           SET stage = 'converted', lead_status = 'Converted', 
+               invoice_id = $1, invoice_no = $2, invoice_amount = $3, 
+               converted_at = NOW(), updated_at = NOW() 
+           WHERE (quotation_id IS NOT NULL AND quotation_id = $4) OR id = $5`,
+          [createdInvoice.id, createdInvoice.invoice_no, grandTotal, quotationId || -1, leadId || '00000000-0000-0000-0000-000000000000']
+        );
+        await client.query('RELEASE SAVEPOINT sp_lead');
+      } catch (lErr) {
+        console.warn('[Invoice] Lead update notice:', lErr.message);
+        try { await client.query('ROLLBACK TO SAVEPOINT sp_lead'); } catch (_) {}
+      }
 
       // Lead status history
       const targetLeadId = leadId || (matchedLead ? matchedLead.id : null);
       if (targetLeadId) {
         try {
+          await client.query('SAVEPOINT sp_history');
           await client.query(
             `INSERT INTO lead_status_history (lead_id, from_stage, to_stage, changed_by, notes)
              VALUES ($1, 'quotation_sent', 'converted', $2, $3)`,
             [targetLeadId, userId || null, `Converted by invoice generation: ${createdInvoice.invoice_no}`]
           );
-        } catch (_) {}
+          await client.query('RELEASE SAVEPOINT sp_history');
+        } catch (_) {
+          try { await client.query('ROLLBACK TO SAVEPOINT sp_history'); } catch (_) {}
+        }
       }
 
       // Check partner commission
       if (partnerId) {
         try {
+          await client.query('SAVEPOINT sp_comm');
           const leadRow = matchedLead || (await client.query('SELECT estimated_kw FROM leads WHERE id = $1', [targetLeadId])).rows[0];
           const kw = parseFloat(leadRow?.estimated_kw) || 0;
           if (kw > 0) {
@@ -356,8 +386,10 @@ router.post('/', async (req, res) => {
               }
             }
           }
+          await client.query('RELEASE SAVEPOINT sp_comm');
         } catch (commErr) {
           console.warn('[Invoice] Commission calculation notice:', commErr.message);
+          try { await client.query('ROLLBACK TO SAVEPOINT sp_comm'); } catch (_) {}
         }
       }
     }
@@ -372,15 +404,18 @@ router.post('/', async (req, res) => {
       convertedLead: matchedLead ? { id: matchedLead.id, stage: 'converted', lead_status: 'Converted' } : null,
     });
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (inTransaction) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+    }
     console.error('[PDF] Invoice Generation Failed:', error);
     try {
       if (fs.existsSync(localPdfPath)) fs.unlinkSync(localPdfPath);
     } catch (_) {}
 
+    const errDetail = error.stderr ? error.stderr.trim() : (error.message || String(error));
     res.status(500).json({
-      error: 'Failed to process invoice request',
-      details: error.stderr ? error.stderr.trim() : error.message,
+      error: error.message || 'Failed to process invoice request',
+      details: errDetail,
     });
   } finally {
     client.release();
@@ -695,7 +730,7 @@ router.put('/:id', requireAdminRole, async (req, res) => {
       sgstTotal,
       igstTotal || 0,
       grandTotal,
-      quotation_id || inv.quotation_id,
+      safeInt(quotation_id || inv.quotation_id),
       quotation_no || inv.quotation_no,
       authorizedSignatureUrl || inv.authorized_signature_url,
       pdfUrl,
@@ -740,7 +775,8 @@ router.put('/:id', requireAdminRole, async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Update invoice error:', err);
-    res.status(500).json({ error: err.message || 'Failed to update invoice.' });
+    const errDetail = err.stderr ? err.stderr.trim() : (err.message || String(err));
+    res.status(500).json({ error: err.message || 'Failed to update invoice.', details: errDetail });
   } finally {
     client.release();
   }

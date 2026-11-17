@@ -471,7 +471,13 @@ export default function InvoicePreviewCard({
           <div style={{ padding: 10, textAlign: 'right', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'flex-end' }}>
             <div style={{ fontSize: 11, color: C.navy, fontWeight: 700 }}>For REON ENERGIES PRIVATE LIMITED</div>
             {signatureUrl ? (
-              <img src={signatureUrl} alt="Signature" crossOrigin="anonymous" style={{ maxHeight: 38, margin: '6px 0' }} />
+              <img
+                src={signatureUrl}
+                alt="Signature"
+                crossOrigin="anonymous"
+                style={{ maxHeight: 38, margin: '6px 0' }}
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
             ) : (
               <div style={{ height: 38 }} />
             )}

@@ -608,7 +608,10 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
         body: JSON.stringify(payload),
       });
       const data = await parseJsonSafely(response);
-      if (!response.ok) throw new Error(data.error || `Failed to ${editData ? 'update' : 'generate'} ${isProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'}`);
+      if (!response.ok) {
+        const detailStr = data.details && data.details !== data.error ? `: ${data.details}` : '';
+        throw new Error(`${data.error || `Failed to ${editData ? 'update' : 'generate'} ${isProforma ? 'PROFORMA INVOICE' : 'TAX INVOICE'}`}${detailStr}`);
+      }
       
       if (data.success && data.pdfUrl) {
         const fullPdf = data.pdfUrl.startsWith('/pdfs/') ? `${API}${data.pdfUrl}` : data.pdfUrl;
@@ -656,7 +659,10 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       });
       const data = await parseJsonSafely(res);
-      if (!res.ok) throw new Error(data.error || 'Failed to turn into Tax Invoice');
+      if (!res.ok) {
+        const detailStr = data.details && data.details !== data.error ? `: ${data.details}` : '';
+        throw new Error(`${data.error || 'Failed to turn into Tax Invoice'}${detailStr}`);
+      }
 
       const invNo = data.invoiceNo || data.invoice?.invoice_no;
       const newPdf = data.pdfUrl?.startsWith('/pdfs/') ? `${API}${data.pdfUrl}` : data.pdfUrl;
@@ -1091,7 +1097,12 @@ export default function InvoiceForm({ editData, onClearEdit, preselectedQuotatio
             </div>
             {signatureUrl && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 10, background: 'white', padding: 10, borderRadius: 8, border: `1px solid ${C.border}` }}>
-                <img src={signatureUrl} alt="Signature Preview" style={{ maxHeight: 42, maxWidth: 120, objectFit: 'contain' }} />
+                <img
+                  src={signatureUrl}
+                  alt="Signature Preview"
+                  style={{ maxHeight: 42, maxWidth: 120, objectFit: 'contain' }}
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
                 <div style={{ flex: 1, fontSize: 11, color: C.mid }}>
                   <b>Authorised Signatory</b> · Active signature embedded in generated PDF
                 </div>

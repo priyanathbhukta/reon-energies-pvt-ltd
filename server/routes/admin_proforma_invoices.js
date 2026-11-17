@@ -53,6 +53,14 @@ if (!fs.existsSync(PDF_DIR)) {
 
 const runPythonCommand = process.platform === 'win32' ? 'python' : 'python3';
 
+export const isUuid = (val) => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+export const safeUuid = (val) => (isUuid(val) ? val : null);
+export const safeInt = (val) => {
+  if (val === null || val === undefined || val === '') return null;
+  const n = parseInt(val, 10);
+  return isNaN(n) ? null : n;
+};
+
 // ── Helper: Get current Financial Year (e.g. '26-27') ─────────────────────
 export function getCurrentFinancialYear(date = new Date()) {
   const d = new Date(date);
@@ -269,45 +277,47 @@ router.post('/', async (req, res) => {
 
     const pdfUrl = `${getBaseUrl(req)}/pdfs/${pdfFileName}`;
 
+    let inTransaction = false;
     await client.query('BEGIN');
+    inTransaction = true;
 
     // ── Check if a quotation was linked ────────────────────────
-    let quotationId = data.quotation_id || data.quotationId || null;
+    let quotationId = safeInt(data.quotation_id || data.quotationId);
     let quotationNo = data.quotation_no || data.quotationNo || null;
-    let leadId = data.lead_id || data.leadId || null;
-    let partnerId = data.partner_id || data.partnerId || null;
+    let leadId = safeUuid(data.lead_id || data.leadId);
+    let partnerId = safeUuid(data.partner_id || data.partnerId);
     let posName = data.pos_name || null;
     let posId = data.pos_id || null;
-    let userId = data.user_id || data.userId || null;
+    let userId = safeUuid(data.user_id || data.userId);
 
     if (quotationId || quotationNo) {
       const qRes = await client.query(
         'SELECT * FROM quotations WHERE id = $1 OR offer_no = $2 LIMIT 1',
-        [quotationId ? parseInt(quotationId, 10) : -1, quotationNo || '']
+        [quotationId || -1, quotationNo || '']
       );
       if (qRes.rows.length > 0) {
         const q = qRes.rows[0];
         quotationId = q.id;
         quotationNo = q.offer_no;
-        partnerId = q.partner_id || partnerId;
+        partnerId = safeUuid(q.partner_id) || partnerId;
         posName = q.pos_name || posName;
         posId = q.pos_id || posId;
-        userId = q.user_id || userId;
+        userId = safeUuid(q.user_id) || userId;
       }
     }
 
     if (quotationId || leadId) {
       const lRes = await client.query(
-        'SELECT * FROM leads WHERE quotation_id = $1 OR id = $2 LIMIT 1',
+        'SELECT * FROM leads WHERE (quotation_id IS NOT NULL AND quotation_id = $1) OR id = $2 LIMIT 1',
         [quotationId || -1, leadId || '00000000-0000-0000-0000-000000000000']
       );
       if (lRes.rows.length > 0) {
         const l = lRes.rows[0];
         leadId = l.id;
-        partnerId = l.partner_id || partnerId;
+        partnerId = safeUuid(l.partner_id) || partnerId;
         posName = l.pos_name || posName;
         posId = l.pos_id || posId;
-        userId = l.user_id || userId;
+        userId = safeUuid(l.user_id) || userId;
       }
     }
 
@@ -384,15 +394,18 @@ router.post('/', async (req, res) => {
       pdfUrl,
     });
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (inTransaction) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+    }
     console.error('[PDF] Proforma Invoice Generation Failed:', error);
     try {
       if (fs.existsSync(localPdfPath)) fs.unlinkSync(localPdfPath);
     } catch (_) {}
 
+    const errDetail = error.stderr ? error.stderr.trim() : (error.message || String(error));
     res.status(500).json({
-      error: 'Failed to process proforma invoice request',
-      details: error.stderr ? error.stderr.trim() : error.message,
+      error: error.message || 'Failed to process proforma invoice request',
+      details: errDetail,
     });
   } finally {
     client.release();
@@ -524,15 +537,15 @@ router.post('/:id/generate-invoice', async (req, res) => {
       taxInfo.igstTotal,
       taxInfo.grandTotal,
       pdfUrl,
-      pi.id,
+      safeInt(pi.id),
       pi.proforma_invoice_no,
-      pi.quotation_id,
+      safeInt(pi.quotation_id),
       pi.quotation_no,
-      pi.lead_id,
-      pi.partner_id,
+      safeUuid(pi.lead_id),
+      safeUuid(pi.partner_id),
       pi.pos_name,
       pi.pos_id,
-      pi.user_id,
+      safeUuid(pi.user_id),
       pi.authorized_signature_url || null,
     ];
 
@@ -550,31 +563,48 @@ router.post('/:id/generate-invoice', async (req, res) => {
       WHERE id = $3
     `, [createdInvoice.id, createdInvoice.invoice_no, pi.id]);
 
-    // Convert Quotation & Lead if present
-    if (pi.quotation_id) {
-      await client.query(`
-        UPDATE quotations
-        SET status = 'converted',
-            invoice_id = $1,
-            invoice_no = $2,
-            converted_at = NOW(),
-            updated_at = NOW()
-        WHERE id = $3
-      `, [createdInvoice.id, createdInvoice.invoice_no, pi.quotation_id]);
+    // Convert Quotation & Lead if present (guarded with SAVEPOINTs)
+    const piQuotId = safeInt(pi.quotation_id);
+    const piLeadId = safeUuid(pi.lead_id);
+
+    if (piQuotId) {
+      try {
+        await client.query('SAVEPOINT sp_pi_quot');
+        await client.query(`
+          UPDATE quotations
+          SET status = 'converted',
+              invoice_id = $1,
+              invoice_no = $2,
+              converted_at = NOW(),
+              updated_at = NOW()
+          WHERE id = $3
+        `, [createdInvoice.id, createdInvoice.invoice_no, piQuotId]);
+        await client.query('RELEASE SAVEPOINT sp_pi_quot');
+      } catch (qErr) {
+        console.warn('[Proforma Conversion] Quotation update notice:', qErr.message);
+        try { await client.query('ROLLBACK TO SAVEPOINT sp_pi_quot'); } catch (_) {}
+      }
     }
 
-    if (pi.lead_id || pi.quotation_id) {
-      await client.query(`
-        UPDATE leads
-        SET stage = 'converted',
-            lead_status = 'Converted',
-            invoice_id = $1,
-            invoice_no = $2,
-            invoice_amount = $3,
-            converted_at = NOW(),
-            updated_at = NOW()
-        WHERE id = $4 OR quotation_id = $5
-      `, [createdInvoice.id, createdInvoice.invoice_no, grandTotal, pi.lead_id || '00000000-0000-0000-0000-000000000000', pi.quotation_id || -1]);
+    if (piLeadId || piQuotId) {
+      try {
+        await client.query('SAVEPOINT sp_pi_lead');
+        await client.query(`
+          UPDATE leads
+          SET stage = 'converted',
+              lead_status = 'Converted',
+              invoice_id = $1,
+              invoice_no = $2,
+              invoice_amount = $3,
+              converted_at = NOW(),
+              updated_at = NOW()
+          WHERE id = $4 OR (quotation_id IS NOT NULL AND quotation_id = $5)
+        `, [createdInvoice.id, createdInvoice.invoice_no, grandTotal, piLeadId || '00000000-0000-0000-0000-000000000000', piQuotId || -1]);
+        await client.query('RELEASE SAVEPOINT sp_pi_lead');
+      } catch (lErr) {
+        console.warn('[Proforma Conversion] Lead update notice:', lErr.message);
+        try { await client.query('ROLLBACK TO SAVEPOINT sp_pi_lead'); } catch (_) {}
+      }
     }
 
     await client.query('COMMIT');
@@ -590,7 +620,8 @@ router.post('/:id/generate-invoice', async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Failed to generate original invoice from proforma:', err);
-    res.status(500).json({ error: 'Failed to generate original invoice', details: err.message });
+    const errDetail = err.stderr ? err.stderr.trim() : (err.message || String(err));
+    res.status(500).json({ error: err.message || 'Failed to generate original invoice', details: errDetail });
   } finally {
     client.release();
   }
