@@ -963,7 +963,7 @@ _DEFAULT_BOM = [
     {"item": "EARTHING CABLE",            "spec": "4 Sq.mm Copper, Single Core FRLSH",                 "qty": "As required",   "brand": "Reputed Make"},
     {"item": "LIGHTNING ARRESTOR",        "spec": "1M COPPER Bonded Rod with PVC base",               "qty": "As required",   "brand": "True Power / Nitro / ETP LPS"},
     {"item": "CABLE TRAY & ACCESSORIES",  "spec": "Cable Tray PCV 45*25 Cable Tray ISI MARK",      "qty": "As required",   "brand": "BINA Industries, Reputated Make"},
-    {"item": "PVC WEARING",               "spec": "20 MM PVC Conduct for covering DC CABLE and AC CABLE After Market / Fabricated",      "qty": "As required",         "brand": "SUPREME / FINOLEX / ASTRAL"},
+    {"item": "PVC WEARING",               "spec": "20 MM PVC Conduct for covering DC CABLE and AC CABLE",      "qty": "As required",         "brand": "After Market / Fabricated"},
 ]
 
 
